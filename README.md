@@ -83,7 +83,7 @@ The API will be available at `http://127.0.0.1:8000` (configurable in `.env`).
 
 ## API Documentation
 
-API endpoint documentation is available in [`src/api/v1/README.md`](src/api/v1/README.md).
+API endpoint documentation is available in [`src/api/README.md`](src/api/README.md).
 
 Interactive API documentation is available when the server is running:
 - **Swagger UI**: `http://127.0.0.1:8000/docs`
@@ -111,9 +111,8 @@ Interactive API documentation is available when the server is running:
 
 ```
 src/
-├── api/v1/           # API version 1
-│   ├── routers/      # API route handlers
-│   └── services/     # Business logic services
+├── api/              # API endpoints and router
+├── services/         # Business logic services
 ├── config/           # Configuration
 ├── db/               # Database models
 ├── middlewares/      # Custom middleware

@@ -102,7 +102,7 @@ perform_initial_sync() {
         
         # Perform initial sync
         echo "Performing initial synchronization..."
-        curl -X POST "http://localhost:8000/api/v1/obs/sync?full_sync=true" || echo "Initial sync failed, but server is running"
+        curl -X POST "http://localhost:8000/api/obs/sync?full_sync=true" || echo "Initial sync failed, but server is running"
         
         echo "Initial sync completed. Server is ready."
         

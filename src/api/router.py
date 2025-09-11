@@ -3,8 +3,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from src.api.v1.services.sync_coordinator import SyncCoordinator
 from src.config.settings import Settings, get_settings
+from src.services import SyncCoordinator
 
 router = APIRouter(prefix="/obs", tags=["obs"])
 
