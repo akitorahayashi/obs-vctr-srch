@@ -11,7 +11,7 @@ def api_base_url():
     Uses the conftest.py e2e_setup fixture for container management.
     """
     host_bind_ip = os.getenv("HOST_BIND_IP", "127.0.0.1")
-    host_port = os.getenv("TEST_PORT", "8002")
+    host_port = os.getenv("TEST_PORT", "8005")
     return f"http://{host_bind_ip}:{host_port}"
 
 

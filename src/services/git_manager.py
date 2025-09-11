@@ -37,8 +37,36 @@ class GitManager:
                 # Repository already exists, just open it
                 self.repo = Repo(self.local_path)
                 print(f"Repository already exists at {self.local_path}")
+
+                # Ensure we're on the correct branch and pull latest changes
+                try:
+                    # Fetch latest changes
+                    origin = self.repo.remotes.origin
+                    origin.fetch()
+
+                    # Switch to target branch if not already on it
+                    if self.repo.active_branch.name != self.branch:
+                        self.repo.git.checkout(self.branch)
+
+                    # Pull latest changes
+                    origin.pull()
+                    print(f"Updated to latest changes on branch {self.branch}")
+                except Exception as e:
+                    print(f"Warning: Failed to update existing repository: {e}")
+
                 return True
             else:
+                # Create directory if it doesn't exist
+                self.local_path.mkdir(parents=True, exist_ok=True)
+
+                # If directory exists but is not a git repo, clear it
+                if self.local_path.exists() and any(self.local_path.iterdir()):
+                    print(f"Clearing existing directory contents: {self.local_path}")
+                    import shutil
+
+                    shutil.rmtree(self.local_path)
+                    self.local_path.mkdir(parents=True, exist_ok=True)
+
                 # Build clone URL with token for private repos
                 clone_url = self._build_clone_url()
 

@@ -47,6 +47,18 @@ class SearchResult(BaseModel):
     modified_at: Optional[str]
 
 
+@router.post("/setup", response_model=Dict[str, Any])
+async def setup_repository(
+    sync_coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+):
+    """Setup repository by cloning and performing initial sync."""
+    try:
+        result = sync_coordinator.initial_setup()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/sync", response_model=Dict[str, Any])
 async def sync_repository(
     full_sync: bool = False,
