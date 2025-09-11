@@ -31,7 +31,7 @@ def e2e_setup() -> Generator[None, None, None]:
     # Get project name from environment
     project_name = os.getenv("PROJECT_NAME", "obs-vctr-srch")
     test_project_name = f"{project_name}-test"
-    
+
     # Define compose commands
     compose_up_command = docker_command + [
         "compose",

@@ -16,23 +16,7 @@ COPY pyproject.toml uv.lock README.md ./
 
 
 # ==============================================================================
-# Stage 2: Dev Dependencies
-# - Installs ALL dependencies (including development) to create a cached layer
-#   that can be leveraged by CI/CD for linting, testing, etc.
-# ==============================================================================
-FROM base as dev-deps
-
-# Install system dependencies required for the application
-# - curl: used for debugging in the development container
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
-# Install all dependencies, including development ones
-RUN --mount=type=cache,target=/root/.cache \
-  uv sync
-
-
-# ==============================================================================
-# Stage 3: Production Dependencies
+# Stage 2: Production Dependencies
 # - Creates a lean virtual environment with only production dependencies.
 # ==============================================================================
 FROM base as prod-deps
@@ -44,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache \
 
 
 # ==============================================================================
-# Stage 4: Development
+# Stage 3: Development
 # - Development environment with all dependencies and debugging tools
 # - Includes curl and other development utilities
 # ==============================================================================
@@ -59,21 +43,22 @@ RUN groupadd -r appgroup && useradd -r -g appgroup -d /home/appuser -m appuser
 WORKDIR /app
 RUN chown appuser:appgroup /app
 
-# Copy the development virtual environment from dev-deps stage
-COPY --from=dev-deps /app/.venv ./.venv
+# Copy dependency definition files
+COPY pyproject.toml uv.lock README.md ./
+
+# Install development dependencies directly in this layer
+RUN --mount=type=cache,target=/root/.cache \
+  pip install uv
+RUN --mount=type=cache,target=/root/.cache \
+  uv sync
 
 # Set the PATH to include the venv's bin directory
 ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy application code
 COPY --chown=appuser:appgroup src/ ./src
-COPY --chown=appuser:appgroup pyproject.toml .
 COPY --chown=appuser:appgroup entrypoint.sh .
-
 RUN chmod +x entrypoint.sh
-
-# Keep as root for entrypoint.sh to handle permissions
-# USER appuser
 
 EXPOSE 8000
 
@@ -86,7 +71,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 
 # ==============================================================================
-# Stage 5: Production
+# Stage 4: Production
 # - Creates the final, lightweight production image.
 # - Copies the lean venv and only necessary application files.
 # ==============================================================================
