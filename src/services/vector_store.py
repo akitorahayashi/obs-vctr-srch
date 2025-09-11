@@ -35,7 +35,11 @@ class VectorStore:
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
-            name=collection_name, metadata={"description": "Obsidian vault embeddings"}
+            name=collection_name,
+            metadata={
+                "description": "Obsidian vault embeddings",
+                "model_name": model_name,
+            },
         )
 
         print(f"Vector store initialized with {self.collection.count()} documents")
@@ -272,3 +276,56 @@ class VectorStore:
                 # New file will be handled by the sync process
 
         return stats
+
+    def check_model_compatibility(self) -> Dict[str, any]:
+        """Check if the current model matches the stored model in collection metadata."""
+        try:
+            collection_metadata = self.collection.metadata
+            stored_model = collection_metadata.get("model_name", "unknown")
+
+            if stored_model != self.model_name:
+                return {
+                    "compatible": False,
+                    "stored_model": stored_model,
+                    "current_model": self.model_name,
+                    "message": f"Model changed from {stored_model} to {self.model_name}",
+                }
+
+            return {
+                "compatible": True,
+                "stored_model": stored_model,
+                "current_model": self.model_name,
+                "message": "Model is compatible",
+            }
+
+        except Exception as e:
+            # If we can't get metadata, assume incompatible to be safe
+            return {
+                "compatible": False,
+                "stored_model": "unknown",
+                "current_model": self.model_name,
+                "message": f"Could not verify model compatibility: {e}",
+            }
+
+    def clear_collection(self) -> Dict[str, any]:
+        """Clear all documents from the collection and update metadata."""
+        try:
+            # Delete the collection
+            self.client.delete_collection(name=self.collection_name)
+
+            # Recreate the collection with updated metadata
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={
+                    "description": "Obsidian vault embeddings",
+                    "model_name": self.model_name,
+                },
+            )
+
+            return {
+                "success": True,
+                "message": f"Collection cleared and recreated with model {self.model_name}",
+            }
+
+        except Exception as e:
+            return {"success": False, "message": f"Failed to clear collection: {e}"}

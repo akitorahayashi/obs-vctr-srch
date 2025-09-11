@@ -22,6 +22,7 @@ def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoor
             vector_store_path=settings.VECTOR_DB_PATH,
             branch=settings.OBSIDIAN_BRANCH,
             github_token=settings.GITHUB_TOKEN,
+            embedding_model=settings.EMBEDDING_MODEL_NAME,
         )
     return _sync_coordinator
 

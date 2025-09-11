@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     OBSIDIAN_LOCAL_PATH: str = "./obsidian-vault"
     OBSIDIAN_BRANCH: str = "main"
     VECTOR_DB_PATH: str = "./chroma_db"
-    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-mpnet-base-v2"
     GITHUB_TOKEN: str = ""  # For private repositories
 
 

@@ -18,12 +18,18 @@ class SyncCoordinator:
         vector_store_path: str = "./chroma_db",
         branch: str = "main",
         github_token: str = "",
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     ):
         self.git_manager = GitManager(repo_url, local_path, branch, github_token)
         self.processor = ObsidianProcessor()
-        self.vector_store = VectorStore(persist_directory=vector_store_path)
+        self.vector_store = VectorStore(
+            persist_directory=vector_store_path, model_name=embedding_model
+        )
 
         self.local_path = Path(local_path)
+
+        # Check model compatibility on initialization
+        self._check_and_handle_model_change()
 
     def initial_setup(self) -> Dict[str, any]:
         """Perform initial repository setup and full sync."""
@@ -274,3 +280,29 @@ class SyncCoordinator:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _check_and_handle_model_change(self) -> None:
+        """Check for model changes and handle them automatically."""
+        try:
+            compatibility_check = self.vector_store.check_model_compatibility()
+
+            if not compatibility_check["compatible"]:
+                print(f"🔄 Model change detected: {compatibility_check['message']}")
+                print("🗑️  Clearing existing embeddings to ensure compatibility...")
+
+                # Clear the collection
+                clear_result = self.vector_store.clear_collection()
+
+                if clear_result["success"]:
+                    print(f"✅ {clear_result['message']}")
+                    print("🔄 Full sync will be required on next operation.")
+                else:
+                    print(f"❌ Warning: {clear_result['message']}")
+            else:
+                print(
+                    f"✅ Model compatibility check passed: {compatibility_check['message']}"
+                )
+
+        except Exception as e:
+            print(f"⚠️  Model compatibility check failed: {e}")
+            print("🔄 Proceeding with caution - full sync recommended.")

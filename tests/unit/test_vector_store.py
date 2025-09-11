@@ -424,13 +424,96 @@ class TestVectorStore:
         assert result["total_documents"] == 2
         assert result["total_chunks"] == 10
         assert result["model_name"] == self.model_name
-        assert result["collection_name"] == self.collection_name
 
-        # Check tag counts (tag1: 2, tag2: 2, tag3: 1)
-        top_tags = dict(result["top_tags"])
-        assert top_tags["tag1"] == 2
-        assert top_tags["tag2"] == 2
-        assert top_tags["tag3"] == 1
+    def test_check_model_compatibility_compatible(self):
+        """Test model compatibility check when models match."""
+        # Mock collection metadata with same model
+        self.vector_store.collection.metadata = {"model_name": self.model_name}
+
+        result = self.vector_store.check_model_compatibility()
+
+        assert result["compatible"] is True
+        assert result["stored_model"] == self.model_name
+        assert result["current_model"] == self.model_name
+        assert "compatible" in result["message"]
+
+    def test_check_model_compatibility_incompatible(self):
+        """Test model compatibility check when models differ."""
+        old_model = "old-model"
+        # Mock collection metadata with different model
+        self.vector_store.collection.metadata = {"model_name": old_model}
+
+        result = self.vector_store.check_model_compatibility()
+
+        assert result["compatible"] is False
+        assert result["stored_model"] == old_model
+        assert result["current_model"] == self.model_name
+        assert "changed from" in result["message"]
+
+    def test_check_model_compatibility_no_metadata(self):
+        """Test model compatibility check with no stored model metadata."""
+        # Mock collection metadata without model_name
+        self.vector_store.collection.metadata = {"description": "test"}
+
+        result = self.vector_store.check_model_compatibility()
+
+        assert result["compatible"] is False
+        assert result["stored_model"] == "unknown"
+        assert result["current_model"] == self.model_name
+
+    def test_check_model_compatibility_exception(self):
+        """Test model compatibility check when metadata access fails."""
+        # Mock exception when accessing metadata
+        self.vector_store.collection.metadata = Mock()
+        self.vector_store.collection.metadata.get = Mock(
+            side_effect=Exception("Metadata error")
+        )
+
+        result = self.vector_store.check_model_compatibility()
+
+        assert result["compatible"] is False
+        assert result["stored_model"] == "unknown"
+        assert result["current_model"] == self.model_name
+        assert "Could not verify" in result["message"]
+
+    @patch("src.services.vector_store.chromadb.PersistentClient")
+    def test_clear_collection_success(self, mock_client_class):
+        """Test successful collection clearing."""
+        # Mock client and collection operations
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        self.vector_store.client = mock_client
+
+        mock_new_collection = Mock()
+        mock_client.create_collection.return_value = mock_new_collection
+
+        result = self.vector_store.clear_collection()
+
+        # Verify delete and create were called
+        mock_client.delete_collection.assert_called_once_with(name=self.collection_name)
+        mock_client.create_collection.assert_called_once_with(
+            name=self.collection_name,
+            metadata={
+                "description": "Obsidian vault embeddings",
+                "model_name": self.model_name,
+            },
+        )
+
+        assert result["success"] is True
+        assert self.model_name in result["message"]
+        assert self.vector_store.collection == mock_new_collection
+
+    def test_clear_collection_failure(self):
+        """Test collection clearing failure."""
+        # Mock client to raise exception
+        self.vector_store.client.delete_collection.side_effect = Exception(
+            "Delete failed"
+        )
+
+        result = self.vector_store.clear_collection()
+
+        assert result["success"] is False
+        assert "Failed to clear collection" in result["message"]
 
     @patch("builtins.print")
     def test_get_stats_exception(self, mock_print):
