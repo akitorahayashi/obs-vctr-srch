@@ -50,8 +50,8 @@ RUN --mount=type=cache,target=/root/.cache \
 # ==============================================================================
 FROM python:3.12-slim AS development
 
-# Install PostgreSQL client and development tools
-RUN apt-get update && apt-get install -y postgresql-client curl && rm -rf /var/lib/apt/lists/*
+# Install git and development tools
+RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for development
 RUN groupadd -r appgroup && useradd -r -g appgroup -d /home/appuser -m appuser
@@ -67,7 +67,6 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy application code
 COPY --chown=appuser:appgroup src/ ./src
-COPY --chown=appuser:appgroup alembic/ ./alembic
 COPY --chown=appuser:appgroup pyproject.toml .
 COPY --chown=appuser:appgroup entrypoint.sh .
 
@@ -93,8 +92,8 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 # ==============================================================================
 FROM python:3.12-slim AS production
 
-# Install PostgreSQL client for database operations
-RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+# Install git for repository operations
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 
 
@@ -115,7 +114,6 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy only the necessary application code and configuration, excluding tests
 COPY --chown=appuser:appgroup src/ ./src
-COPY --chown=appuser:appgroup alembic/ ./alembic
 COPY --chown=appuser:appgroup pyproject.toml .
 COPY --chown=appuser:appgroup entrypoint.sh .
 

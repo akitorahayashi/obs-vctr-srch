@@ -1,20 +1,4 @@
 services:
-  db:
-    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_HOST_DB_NAME}
-      - POSTGRES_DB=${POSTGRES_HOST_DB_NAME}
-    volumes:
-      - postgres-db:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_HOST_DB_NAME}" ]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-    restart: unless-stopped
-
   api:
     build:
       context: .
@@ -22,14 +6,11 @@ services:
       target: production
     ports:
       - "${HOST_BIND_IP}:${HOST_PORT}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
     env_file:
       - .env
-    environment:
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_HOST_DB_NAME}
-      - POSTGRES_DB_NAME=${POSTGRES_HOST_DB_NAME}
+    volumes:
+      - chroma-db:/app/chroma_db
+      - obsidian-vault:/app/obsidian-vault
     healthcheck:
       test: [ "CMD", "python", "-c", "import sys, urllib.request; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').getcode() == 200 else sys.exit(1)" ]
       interval: 30s
@@ -39,7 +20,11 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres-db:
+  chroma-db:
     driver: local
-    name: ${PROJECT_NAME}-postgres-db-prod
+    name: ${PROJECT_NAME}-chroma-db-prod
+    external: false
+  obsidian-vault:
+    driver: local
+    name: ${PROJECT_NAME}-obsidian-vault-prod
     external: false

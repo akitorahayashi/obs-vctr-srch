@@ -1,10 +1,15 @@
 from fastapi import FastAPI
 
+from src.api.v1.routers import obsidian
+
 app = FastAPI(
-    title="FastAPI Template",
+    title="Obsidian Vector Search API",
     version="0.1.0",
-    description="A FastAPI template project",
+    description="A FastAPI application for searching Obsidian vault with vector embeddings",
 )
+
+# Include routers
+app.include_router(obsidian.router, prefix="/api/v1")
 
 
 @app.get("/")

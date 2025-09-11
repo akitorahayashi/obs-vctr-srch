@@ -4,33 +4,52 @@
 # or if an unset variable is used ('u').
 set -eu
 
-# --- Wait for DB and run migrations ---
-# This section is skipped if the command is not the default uvicorn server
-# (e.g., if a user runs 'shell' or another command).
-if [ "$#" -eq 0 ] || [ "$1" = "uvicorn" ]; then
-    count=0
-    echo "Waiting for database to be ready..."
+# --- Clone/Update Obsidian Repository ---
+clone_obsidian_repo() {
+    echo "Setting up Obsidian repository..."
     
-    # Create database if it doesn't exist
-    echo "Checking if database exists and creating if necessary..."
-    while ! PGPASSWORD="${POSTGRES_PASSWORD}" psql -h db -U "${POSTGRES_USER}" -d postgres -c "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB_NAME}'" | grep -q 1; do
-        echo "Creating database ${POSTGRES_DB_NAME}..."
-        PGPASSWORD="${POSTGRES_PASSWORD}" psql -h db -U "${POSTGRES_USER}" -d postgres -c "CREATE DATABASE \"${POSTGRES_DB_NAME}\";" || true
-        sleep 1
-    done
-    echo "Database exists."
+    # Remove existing directory if it exists
+    if [ -d "${OBSIDIAN_LOCAL_PATH}" ]; then
+        echo "Removing existing directory: ${OBSIDIAN_LOCAL_PATH}"
+        rm -rf "${OBSIDIAN_LOCAL_PATH}"
+    fi
     
-    while ! alembic upgrade head; do
-        count=$((count + 1))
-        if [ ${count} -ge 30 ]; then
-            echo "Failed to connect to database after 30 attempts. Exiting."
-            exit 1
+    # Build git URL with token for private repos
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        # Extract repo info from URL
+        REPO_PART=$(echo "${OBSIDIAN_REPO_URL}" | sed 's|https://github.com/||')
+        CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO_PART}"
+        echo "Cloning private repository with token..."
+    else
+        CLONE_URL="${OBSIDIAN_REPO_URL}"
+        echo "Cloning public repository..."
+    fi
+    
+    # Clone repository
+    if git clone -b "${OBSIDIAN_BRANCH}" "${CLONE_URL}" "${OBSIDIAN_LOCAL_PATH}"; then
+        echo "Successfully cloned Obsidian repository to ${OBSIDIAN_LOCAL_PATH}"
+        
+        # Remove .git directory to avoid conflicts
+        if [ -d "${OBSIDIAN_LOCAL_PATH}/.git" ]; then
+            rm -rf "${OBSIDIAN_LOCAL_PATH}/.git"
+            echo "Removed .git directory for security"
         fi
-        echo "Migration failed, retrying in 2 seconds... (${count}/30)"
-        sleep 2
-    done
-    echo "Database migrations completed successfully."
+    else
+        echo "Failed to clone repository. Please check your OBSIDIAN_REPO_URL and GITHUB_TOKEN settings."
+        echo "For private repositories, make sure GITHUB_TOKEN is set with repo access."
+        exit 1
+    fi
+}
+
+# Clone Obsidian repo if settings are provided
+if [ -n "${OBSIDIAN_REPO_URL:-}" ] && [ -n "${OBSIDIAN_LOCAL_PATH:-}" ]; then
+    clone_obsidian_repo
+else
+    echo "Obsidian settings not provided, skipping repository clone..."
 fi
+
+# --- Application startup ready ---
+echo "Application startup preparations completed."
 
 # --- Start Uvicorn server (or run another command) ---
 # If arguments are passed to the script, execute them instead of the default server.

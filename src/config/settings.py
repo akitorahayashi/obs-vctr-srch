@@ -12,7 +12,13 @@ class Settings(BaseSettings):
     from the project root, there's no need to explicitly specify the file path.
     """
 
-    DATABASE_URL: str
+    # Obsidian Vector Search settings
+    OBSIDIAN_REPO_URL: str = "https://github.com/akitorahayashi/obsidian-vault.git"
+    OBSIDIAN_LOCAL_PATH: str = "./obsidian-vault"
+    OBSIDIAN_BRANCH: str = "main"
+    VECTOR_DB_PATH: str = "./chroma_db"
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+    GITHUB_TOKEN: str = ""  # For private repositories
 
 
 @lru_cache

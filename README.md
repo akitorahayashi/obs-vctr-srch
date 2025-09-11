@@ -1,20 +1,23 @@
-# FastAPI Template
+# Obsidian Vector Search API
 
-A production-ready FastAPI template with modern development tooling, comprehensive testing, and Docker containerization.
+A FastAPI application that enables vector-based search of your private Obsidian vault.
 
 ## Features
 
-- **FastAPI** - Modern, fast web framework for building APIs
+- **Git Repository Sync** - Clone and sync with private Obsidian vault repositories
+- **Incremental Updates** - Only re-embed changed files using git diff detection
+- **Vector Search** - Fast semantic search using sentence transformers and ChromaDB
+- **Obsidian-Aware Processing** - Handles frontmatter, tags, internal links, and markdown
+- **FastAPI** - Modern, fast web framework with automatic API documentation
 - **Docker** - Containerized development and deployment
-- **uv** - Ultra-fast Python package installer and resolver
-- **Pytest** - Comprehensive testing with testcontainers
-- **Code Quality** - Black (formatter) + Ruff (linter)
-- **Database** - PostgreSQL with Alembic migrations
-- **Makefile** - Unified development commands
 
 ## Quick Start
 
-### 1. Setup Environment
+### 1. Prerequisites
+
+- **Docker** - For containerized deployment (optional)
+
+### 2. Setup Environment
 
 ```bash
 make setup
@@ -22,7 +25,16 @@ make setup
 
 This installs dependencies with uv and creates `.env` file from `.env.example`.
 
-### 2. Start Development Server
+Edit `.env` to configure your Obsidian repository:
+```env
+OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obsidian-vault.git
+OBSIDIAN_LOCAL_PATH=./obsidian-vault
+OBSIDIAN_BRANCH=main
+VECTOR_DB_PATH=./chroma_db
+EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+```
+
+### 3. Start Development Server
 
 ```bash
 make up
@@ -30,18 +42,27 @@ make up
 
 The API will be available at `http://127.0.0.1:8000` (configurable in `.env`).
 
-### 3. Run Tests
+### 4. Initialize Your Vault
 
 ```bash
-make test
+# Setup repository and perform initial sync
+curl -X POST "http://127.0.0.1:8000/api/v1/obsidian/setup"
 ```
-
-Runs unit, database, and end-to-end tests using testcontainers for full isolation.
 
 ## API Endpoints
 
+### Core Endpoints
 - `GET /` - Hello World
 - `GET /health` - Health check
+
+### Obsidian Vault Management
+- `POST /api/v1/obsidian/setup` - Initialize repository and perform initial sync
+- `POST /api/v1/obsidian/sync` - Incremental or full synchronization
+- `POST /api/v1/obsidian/search` - Vector search in your vault
+- `GET /api/v1/obsidian/status` - Repository and vector store status
+- `POST /api/v1/obsidian/cleanup` - Remove orphaned embeddings
+- `GET /api/v1/obsidian/stats` - Vector store statistics
+
 
 ## Development Commands
 
