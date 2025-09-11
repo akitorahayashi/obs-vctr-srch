@@ -60,23 +60,21 @@ class VectorStore:
                 ids.append(chunk_id)
                 documents.append(chunk["content"])
 
-                # Prepare metadata
+                # Prepare metadata (ensure no None values)
                 metadata = {
-                    "file_path": document.file_path,
-                    "title": document.title,
+                    "file_path": document.file_path or "",
+                    "title": document.title or "",
                     "chunk_index": i,
                     "total_chunks": len(chunks),
-                    "word_count": document.word_count,
-                    "token_count": document.token_count,
-                    "tags": json.dumps(document.tags),
-                    "links": json.dumps(document.links),
+                    "word_count": document.word_count or 0,
+                    "token_count": document.token_count or 0,
+                    "tags": json.dumps(document.tags or []),
+                    "links": json.dumps(document.links or []),
                     "created_at": (
-                        document.created_at.isoformat() if document.created_at else None
+                        document.created_at.isoformat() if document.created_at else ""
                     ),
                     "modified_at": (
-                        document.modified_at.isoformat()
-                        if document.modified_at
-                        else None
+                        document.modified_at.isoformat() if document.modified_at else ""
                     ),
                     "indexed_at": datetime.now().isoformat(),
                 }

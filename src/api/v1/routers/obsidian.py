@@ -1,12 +1,12 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from src.api.v1.services.sync_coordinator import SyncCoordinator
 from src.config.settings import Settings, get_settings
-from src.services.sync_coordinator import SyncCoordinator
 
-router = APIRouter(prefix="/obsidian", tags=["obsidian"])
+router = APIRouter(prefix="/obs", tags=["obs"])
 
 # Global sync coordinator instance
 _sync_coordinator: Optional[SyncCoordinator] = None
@@ -44,19 +44,6 @@ class SearchResult(BaseModel):
     links: List[str]
     created_at: Optional[str]
     modified_at: Optional[str]
-
-
-@router.post("/setup", response_model=Dict[str, Any])
-async def setup_repository(
-    background_tasks: BackgroundTasks,
-    sync_coordinator: SyncCoordinator = Depends(get_sync_coordinator),
-):
-    """Initialize repository and perform initial synchronization."""
-    try:
-        result = sync_coordinator.initial_setup()
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/sync", response_model=Dict[str, Any])
@@ -138,17 +125,5 @@ async def reindex_file(
     try:
         result = sync_coordinator.force_reindex_file(file_path)
         return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/stats", response_model=Dict[str, Any])
-async def get_vector_store_stats(
-    sync_coordinator: SyncCoordinator = Depends(get_sync_coordinator),
-):
-    """Get detailed vector store statistics."""
-    try:
-        stats = sync_coordinator.vector_store.get_stats()
-        return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

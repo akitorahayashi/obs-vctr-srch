@@ -28,11 +28,48 @@ This installs dependencies with uv and creates `.env` file from `.env.example`.
 Edit `.env` to configure your Obsidian repository:
 ```env
 OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obsidian-vault.git
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 OBSIDIAN_LOCAL_PATH=./obsidian-vault
 OBSIDIAN_BRANCH=main
 VECTOR_DB_PATH=./chroma_db
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 ```
+
+#### GitHub Personal Access Token Setup
+
+1. **Create Token**: Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
+
+2. **Generate new token**: Click "Generate new token (classic)"
+
+3. **Configure token**:
+   - **Note**: `Obsidian Vault Access` (or any descriptive name)
+   - **Expiration**: Choose appropriate expiration (90 days recommended)
+   - **Scopes**: Select the following permissions:
+
+```
+✅ repo (Full control of private repositories)
+   ├── ✅ repo:status (Access commit status)
+   ├── ✅ repo_deployment (Access deployment status)
+   ├── ✅ public_repo (Access public repositories)
+   ├── ✅ repo:invite (Access repository invitations)
+   └── ✅ security_events (Read and write security events)
+```
+
+4. **For private repositories** (recommended scope):
+   - ✅ **repo** - Full control of private repositories
+   
+5. **For public repositories only** (minimal scope):
+   - ✅ **public_repo** - Access public repositories
+
+6. **Copy token**: After creation, copy the token immediately (it won't be shown again)
+
+7. **Add to .env**: Paste the token as `GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+
+#### Security Notes
+- ⚠️ **Never commit** the `.env` file with real tokens
+- 🔄 **Rotate tokens** regularly (every 90 days)
+- 🔒 **Use minimal scopes** - only `public_repo` if your vault is public
+- 📝 **Monitor token usage** in GitHub Settings → Developer settings
 
 ### 3. Start Development Server
 
@@ -42,27 +79,15 @@ make up
 
 The API will be available at `http://127.0.0.1:8000` (configurable in `.env`).
 
-### 4. Initialize Your Vault
+**Note**: Initial synchronization runs automatically on first startup. The API will be ready to use once the sync completes.
 
-```bash
-# Setup repository and perform initial sync
-curl -X POST "http://127.0.0.1:8000/api/v1/obsidian/setup"
-```
+## API Documentation
 
-## API Endpoints
+API endpoint documentation is available in [`src/api/v1/README.md`](src/api/v1/README.md).
 
-### Core Endpoints
-- `GET /` - Hello World
-- `GET /health` - Health check
-
-### Obsidian Vault Management
-- `POST /api/v1/obsidian/setup` - Initialize repository and perform initial sync
-- `POST /api/v1/obsidian/sync` - Incremental or full synchronization
-- `POST /api/v1/obsidian/search` - Vector search in your vault
-- `GET /api/v1/obsidian/status` - Repository and vector store status
-- `POST /api/v1/obsidian/cleanup` - Remove orphaned embeddings
-- `GET /api/v1/obsidian/stats` - Vector store statistics
-
+Interactive API documentation is available when the server is running:
+- **Swagger UI**: `http://127.0.0.1:8000/docs`
+- **ReDoc**: `http://127.0.0.1:8000/redoc`
 
 ## Development Commands
 
@@ -87,6 +112,8 @@ curl -X POST "http://127.0.0.1:8000/api/v1/obsidian/setup"
 ```
 src/
 ├── api/v1/           # API version 1
+│   ├── routers/      # API route handlers
+│   └── services/     # Business logic services
 ├── config/           # Configuration
 ├── db/               # Database models
 ├── middlewares/      # Custom middleware

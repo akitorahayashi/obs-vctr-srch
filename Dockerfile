@@ -72,8 +72,8 @@ COPY --chown=appuser:appgroup entrypoint.sh .
 
 RUN chmod +x entrypoint.sh
 
-# Switch to non-root user
-USER appuser
+# Keep as root for entrypoint.sh to handle permissions
+# USER appuser
 
 EXPOSE 8000
 
@@ -93,7 +93,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 FROM python:3.12-slim AS production
 
 # Install git for repository operations
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git gosu curl && rm -rf /var/lib/apt/lists/*
 
 
 
