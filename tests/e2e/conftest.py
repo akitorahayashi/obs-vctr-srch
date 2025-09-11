@@ -28,6 +28,10 @@ def e2e_setup() -> Generator[None, None, None]:
     host_port = os.getenv("TEST_PORT", "8002")
     health_url = f"http://{host_bind_ip}:{host_port}/health"
 
+    # Get project name from environment
+    project_name = os.getenv("PROJECT_NAME", "obs-vctr-srch")
+    test_project_name = f"{project_name}-test"
+    
     # Define compose commands
     compose_up_command = docker_command + [
         "compose",
@@ -36,7 +40,7 @@ def e2e_setup() -> Generator[None, None, None]:
         "-f",
         "docker-compose.test.override.yml",
         "--project-name",
-        "fastapi-template-test",
+        test_project_name,
         "up",
         "-d",
     ]
@@ -47,7 +51,7 @@ def e2e_setup() -> Generator[None, None, None]:
         "-f",
         "docker-compose.test.override.yml",
         "--project-name",
-        "fastapi-template-test",
+        test_project_name,
         "down",
         "--remove-orphans",
     ]
@@ -82,7 +86,7 @@ def e2e_setup() -> Generator[None, None, None]:
                     "-f",
                     "docker-compose.test.override.yml",
                     "--project-name",
-                    "fastapi-template-test",
+                    test_project_name,
                     "logs",
                     "api",
                 ]
