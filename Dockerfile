@@ -78,7 +78,7 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 FROM python:3.12-slim AS production
 
 # Install git for repository operations
-RUN apt-get update && apt-get install -y git gosu curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
 
 
 
