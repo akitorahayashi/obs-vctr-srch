@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -246,7 +246,7 @@ class TestGitManager:
         # Check that both print statements were called
         expected_calls = [
             call("Successfully pulled latest changes"),
-            call("Successfully updated all submodules")
+            call("Successfully updated all submodules"),
         ]
         mock_print.assert_has_calls(expected_calls)
 
@@ -263,7 +263,9 @@ class TestGitManager:
         result = self.git_manager.pull_changes()
 
         assert result is False
-        mock_print.assert_called_with("Failed to pull changes or update submodules: Pull failed")
+        mock_print.assert_called_with(
+            "Failed to pull changes or update submodules: Pull failed"
+        )
 
     def test_get_file_content_success(self):
         """Test successful file content retrieval."""

@@ -15,7 +15,9 @@ class TestProductionStartup:
     @pytest.fixture(autouse=True)
     def setup_client(self, api_base_url: str):
         """Setup HTTP client for each test method."""
-        self.client = httpx.Client(base_url=api_base_url, timeout=600.0)  # 10 minutes for build-index
+        self.client = httpx.Client(
+            base_url=api_base_url, timeout=600.0
+        )  # 10 minutes for build-index
         yield
         self.client.close()
 

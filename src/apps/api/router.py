@@ -1,7 +1,7 @@
-from typing import Any, Dict, Optional
 import asyncio
 import json
 import time
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -141,13 +141,13 @@ async def build_index(settings: Settings = Depends(get_settings)):
         # Run with configurable timeout
         result = await asyncio.wait_for(
             asyncio.get_event_loop().run_in_executor(None, _build_index_sync),
-            timeout=float(settings.BUILD_INDEX_TIMEOUT)
+            timeout=float(settings.BUILD_INDEX_TIMEOUT),
         )
         return result
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=408,
-            detail=f"Build index operation timed out after {settings.BUILD_INDEX_TIMEOUT} seconds"
+            detail=f"Build index operation timed out after {settings.BUILD_INDEX_TIMEOUT} seconds",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Build index failed: {str(e)}")
@@ -156,14 +156,14 @@ async def build_index(settings: Settings = Depends(get_settings)):
 @router.post("/build-index-stream")
 async def build_index_stream(settings: Settings = Depends(get_settings)):
     """Build or rebuild the entire vector index with streaming progress updates."""
-    
+
     async def generate_progress():
         try:
             sc = get_sync_coordinator(settings)
-            
+
             # Initial status
             yield f"data: {json.dumps({'type': 'status', 'message': 'Starting build index process...', 'progress': 0})}\n\n"
-            
+
             # Setup repository if needed
             if getattr(sc.git_manager, "repo", None) is None:
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Setting up repository...', 'progress': 5})}\n\n"
@@ -176,13 +176,13 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
                 if not sc.git_manager.pull_changes():
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to update repository'})}\n\n"
                     return
-            
+
             # Clear existing index
             yield f"data: {json.dumps({'type': 'status', 'message': 'Clearing existing index...', 'progress': 10})}\n\n"
-            
+
             import shutil
             from pathlib import Path
-            
+
             db_path = sc.vector_store.persist_directory
             if Path(db_path).exists():
                 try:
@@ -190,33 +190,34 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Failed to clear existing index: {str(e)}'})}\n\n"
                     return
-            
+
             # Reinitialize vector store
             from src.services.vector_store import VectorStore
+
             sc.vector_store = VectorStore(
                 persist_directory=str(db_path), model_name=settings.EMBEDDING_MODEL_NAME
             )
-            
+
             # Get all files to process
             yield f"data: {json.dumps({'type': 'status', 'message': 'Scanning markdown files...', 'progress': 15})}\n\n"
             md_files = sc.git_manager.get_all_markdown_files()
-            
+
             if not md_files:
                 yield f"data: {json.dumps({'type': 'complete', 'message': 'No markdown files found', 'stats': {'processed': 0, 'failed': 0}})}\n\n"
                 return
-            
+
             total_files = len(md_files)
             yield f"data: {json.dumps({'type': 'status', 'message': f'Found {total_files} files to process', 'progress': 20, 'total_files': total_files})}\n\n"
-            
+
             # Process files with streaming progress
             stats = {"processed": 0, "failed": 0, "total_chunks": 0}
             start_time = time.time()
-            
+
             for i, file_path in enumerate(md_files):
                 try:
                     # Calculate progress (20% to 90% for file processing)
                     progress = 20 + (i / total_files) * 70
-                    
+
                     # Calculate estimated completion time
                     if i > 0:
                         elapsed = time.time() - start_time
@@ -228,26 +229,26 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
                         eta_str = f"{eta_minutes}m {eta_seconds}s"
                     else:
                         eta_str = "calculating..."
-                    
+
                     yield f"data: {json.dumps({'type': 'progress', 'message': f'Processing: {file_path}', 'progress': progress, 'current_file': i + 1, 'total_files': total_files, 'eta': eta_str})}\n\n"
-                    
+
                     # Get file content
                     content = sc.git_manager.get_file_content(file_path)
                     if not content:
                         stats["failed"] += 1
                         yield f"data: {json.dumps({'type': 'warning', 'message': f'No content found for: {file_path}'})}\n\n"
                         continue
-                    
+
                     # Process the file
                     document = sc.processor.process_file(file_path, content)
                     if not document:
                         stats["failed"] += 1
                         yield f"data: {json.dumps({'type': 'warning', 'message': f'Failed to process: {file_path}'})}\n\n"
                         continue
-                    
+
                     # Split into chunks for embedding
                     chunks = sc.processor.split_content_for_embedding(document)
-                    
+
                     # Add to vector store
                     if sc.vector_store.add_document(document, chunks):
                         stats["processed"] += 1
@@ -256,27 +257,27 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
                     else:
                         stats["failed"] += 1
                         yield f"data: {json.dumps({'type': 'warning', 'message': f'Failed to add to vector store: {file_path}'})}\n\n"
-                
+
                 except Exception as e:
                     stats["failed"] += 1
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Error processing {file_path}: {str(e)}'})}\n\n"
-            
+
             # Final completion
             total_time = time.time() - start_time
             yield f"data: {json.dumps({'type': 'status', 'message': 'Finalizing...', 'progress': 95})}\n\n"
-            
+
             result = {
-                'type': 'complete',
-                'message': f'Build index complete! Processed {stats["processed"]} files, {stats["failed"]} failed',
-                'stats': stats,
-                'total_time_seconds': round(total_time, 2),
-                'progress': 100
+                "type": "complete",
+                "message": f'Build index complete! Processed {stats["processed"]} files, {stats["failed"]} failed',
+                "stats": stats,
+                "total_time_seconds": round(total_time, 2),
+                "progress": 100,
             }
             yield f"data: {json.dumps(result)}\n\n"
-            
+
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': f'Build index failed: {str(e)}'})}\n\n"
-    
+
     return StreamingResponse(
         generate_progress(),
         media_type="text/event-stream",
@@ -286,5 +287,5 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
-        }
+        },
     )
