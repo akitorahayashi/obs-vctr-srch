@@ -18,7 +18,7 @@ class TestAPIEndpoints:
 
     def test_obsidian_status_endpoint_exists(self):
         """Test that Obsidian status endpoint exists and returns proper structure."""
-        response = self.client.get("/api/obs/status")
+        response = self.client.get("/api/obs-vctr-srch/status")
         assert response.status_code == 200
         response_data = response.json()
 
@@ -29,20 +29,20 @@ class TestAPIEndpoints:
 
     def test_obsidian_sync_endpoint_exists(self):
         """Test that Obsidian sync endpoint exists."""
-        response = self.client.post("/api/obs/sync")
+        response = self.client.post("/api/obs-vctr-srch/sync")
         assert response.status_code != 404
 
     def test_obsidian_search_endpoint_exists(self):
         """Test that Obsidian search endpoint exists."""
-        response = self.client.post("/api/obs/search", json={"query": "test"})
+        response = self.client.post("/api/obs-vctr-srch/search", json={"query": "test"})
         assert response.status_code != 404
 
     def test_api_endpoints_accessibility(self):
         """Test that all API endpoints are properly loaded and accessible."""
         endpoints_to_test = [
-            ("/api/obs/status", "GET"),
-            ("/api/obs/sync", "POST"),
-            ("/api/obs/search", "POST"),
+            ("/api/obs-vctr-srch/status", "GET"),
+            ("/api/obs-vctr-srch/sync", "POST"),
+            ("/api/obs-vctr-srch/search", "POST"),
         ]
 
         for endpoint, method in endpoints_to_test:
