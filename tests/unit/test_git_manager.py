@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 
 import pytest
 
@@ -60,6 +60,7 @@ class TestGitManager:
 
         mock_exists.return_value = True
         mock_repo = Mock()
+        mock_repo.submodules = []  # Mock empty submodules
         mock_repo_class.return_value = mock_repo
 
         result = self.git_manager.setup_repository()
@@ -74,6 +75,7 @@ class TestGitManager:
         """Test setup when cloning new repository."""
         mock_exists.return_value = False
         mock_repo = Mock()
+        mock_repo.submodules = []  # Mock empty submodules
         mock_repo_class.clone_from.return_value = mock_repo
 
         result = self.git_manager.setup_repository()
@@ -92,6 +94,46 @@ class TestGitManager:
         """Test setup repository failure."""
         mock_exists.return_value = False
         mock_repo_class.clone_from.side_effect = Exception("Clone failed")
+
+        result = self.git_manager.setup_repository()
+
+        assert result is False
+        assert self.git_manager.repo is None
+
+    @patch("src.services.git_manager.Repo")
+    @patch("pathlib.Path.exists")
+    def test_setup_repository_authentication_error(self, mock_exists, mock_repo_class):
+        """Test setup repository with authentication error."""
+        from git.exc import GitCommandError
+
+        mock_exists.return_value = False
+        # Simulate authentication failure
+        mock_repo_class.clone_from.side_effect = GitCommandError(
+            "git clone", 128, "Authentication failed"
+        )
+
+        result = self.git_manager.setup_repository()
+
+        assert result is False
+        assert self.git_manager.repo is None
+        # Verify clone was attempted with correct URL
+        mock_repo_class.clone_from.assert_called_once_with(
+            "https://test_token@github.com/test/repo.git",
+            self.git_manager.local_path,
+            branch=self.branch,
+        )
+
+    @patch("src.services.git_manager.Repo")
+    @patch("pathlib.Path.exists")
+    def test_setup_repository_network_error(self, mock_exists, mock_repo_class):
+        """Test setup repository with network error."""
+        from git.exc import GitCommandError
+
+        mock_exists.return_value = False
+        # Simulate network failure
+        mock_repo_class.clone_from.side_effect = GitCommandError(
+            "git clone", 128, "Could not resolve host"
+        )
 
         result = self.git_manager.setup_repository()
 
@@ -193,6 +235,7 @@ class TestGitManager:
         mock_repo = Mock()
         mock_origin = Mock()
         mock_repo.remotes.origin = mock_origin
+        mock_repo.submodules = []  # Mock empty submodules
 
         self.git_manager.repo = mock_repo
 
@@ -200,7 +243,12 @@ class TestGitManager:
 
         assert result is True
         mock_origin.pull.assert_called_once()
-        mock_print.assert_called_with("Successfully pulled latest changes")
+        # Check that both print statements were called
+        expected_calls = [
+            call("Successfully pulled latest changes"),
+            call("Successfully updated all submodules")
+        ]
+        mock_print.assert_has_calls(expected_calls)
 
     @patch("builtins.print")
     def test_pull_changes_failure(self, mock_print):
@@ -215,7 +263,7 @@ class TestGitManager:
         result = self.git_manager.pull_changes()
 
         assert result is False
-        mock_print.assert_called_with("Failed to pull changes: Pull failed")
+        mock_print.assert_called_with("Failed to pull changes or update submodules: Pull failed")
 
     def test_get_file_content_success(self):
         """Test successful file content retrieval."""

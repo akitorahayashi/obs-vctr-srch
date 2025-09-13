@@ -24,7 +24,9 @@ def e2e_setup() -> Generator[None, None, None]:
     host_port = os.getenv("TEST_PORT", "8005")
     health_url = f"http://{host_bind_ip}:{host_port}/health"
 
-    # Initialize Docker Compose with testcontainers
+    # Initialize Docker Compose with testcontainers and isolated project name via env var
+    test_project_name = os.getenv("TEST_PROJECT_NAME", "obs-vctr-srch-test")
+    os.environ["COMPOSE_PROJECT_NAME"] = test_project_name
     compose = DockerCompose(
         ".",
         compose_file_name=["docker-compose.yml", "docker-compose.test.override.yml"],
@@ -36,7 +38,7 @@ def e2e_setup() -> Generator[None, None, None]:
 
         # Health Check
         start_time = time.time()
-        timeout = 30  # 30 seconds for basic API health check
+        timeout = 120  # 2 minutes for API startup including potential build
         is_healthy = False
         while time.time() - start_time < timeout:
             try:

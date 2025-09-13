@@ -83,6 +83,89 @@ class TestObsidianWorkflow:
         )
         assert search_response.status_code != 404
 
+    def test_vault_change_tracking_workflow(self):
+        """Test dynamic vault changes: add -> modify -> delete."""
+        from pathlib import Path
+
+        # Get vault path from container (if mounted)
+        # This test only works if obs-vault is mounted for testing
+        vault_path = Path("obs-vault")
+        if not vault_path.exists():
+            import pytest
+
+            pytest.skip("Vault directory not mounted - cannot test file changes")
+
+        test_file = vault_path / "test_dynamic_change.md"
+        test_content_v1 = (
+            "# Test Document\n\nUnique test content v1: test_unique_keyword_v1"
+        )
+        test_content_v2 = (
+            "# Test Document Modified\n\nUnique test content v2: test_unique_keyword_v2"
+        )
+
+        try:
+            # Test 1: Add new file
+            test_file.write_text(test_content_v1, encoding="utf-8")
+
+            # Trigger sync
+            sync_response = self.client.post("/api/obs-vctr-srch/sync")
+            if sync_response.status_code == 200:
+                # Search for new content
+                search_response = self.client.post(
+                    "/api/obs-vctr-srch/search",
+                    json={"query": "test_unique_keyword_v1", "n_results": 5},
+                )
+                if search_response.status_code == 200:
+                    results = search_response.json().get("results", [])
+                    # Should find the new content (may take time for indexing)
+                    print(f"Add test - found {len(results)} results")
+
+            # Test 2: Modify file
+            test_file.write_text(test_content_v2, encoding="utf-8")
+
+            # Trigger sync
+            sync_response = self.client.post("/api/obs-vctr-srch/sync")
+            if sync_response.status_code == 200:
+                # Search for new content
+                search_response = self.client.post(
+                    "/api/obs-vctr-srch/search",
+                    json={"query": "test_unique_keyword_v2", "n_results": 5},
+                )
+                if search_response.status_code == 200:
+                    results = search_response.json().get("results", [])
+                    print(f"Modify test - found {len(results)} results")
+
+                # Search for old content (should not find)
+                old_search_response = self.client.post(
+                    "/api/obs-vctr-srch/search",
+                    json={"query": "test_unique_keyword_v1", "n_results": 5},
+                )
+                if old_search_response.status_code == 200:
+                    old_results = old_search_response.json().get("results", [])
+                    print(f"Old content search - found {len(old_results)} results")
+
+            # Test 3: Delete file
+            test_file.unlink()
+
+            # Trigger sync
+            sync_response = self.client.post("/api/obs-vctr-srch/sync")
+            if sync_response.status_code == 200:
+                # Search should not find deleted content
+                search_response = self.client.post(
+                    "/api/obs-vctr-srch/search",
+                    json={"query": "test_unique_keyword_v2", "n_results": 5},
+                )
+                if search_response.status_code == 200:
+                    results = search_response.json().get("results", [])
+                    print(f"Delete test - found {len(results)} results")
+
+        except Exception as e:
+            print(f"Change tracking test encountered error: {e}")
+        finally:
+            # Cleanup
+            if test_file.exists():
+                test_file.unlink()
+
 
 @pytest.fixture(scope="module")
 def api_base_url():

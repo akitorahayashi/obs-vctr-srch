@@ -51,6 +51,14 @@ class GitManager:
                     # Pull latest changes
                     origin.pull()
                     print(f"Updated to latest changes on branch {self.branch}")
+
+                    # Update submodules to commits recorded in main repository
+                    if self.repo.submodules:
+                        print("Updating submodules...")
+                        for submodule in self.repo.submodules:
+                            submodule.update(recursive=True)
+                            print(f"Updated submodule: {submodule.name}")
+                        print("All submodules updated")
                 except Exception as e:
                     print(f"Warning: Failed to update existing repository: {e}")
 
@@ -76,6 +84,15 @@ class GitManager:
                     clone_url, self.local_path, branch=self.branch
                 )
                 print(f"Repository cloned to {self.local_path}")
+
+                # Initialize and update submodules
+                if self.repo.submodules:
+                    print("Initializing and updating submodules...")
+                    self.repo.git.submodule("update", "--init", "--recursive")
+                    for submodule in self.repo.submodules:
+                        print(f"Updated submodule: {submodule.name}")
+                    print("All submodules initialized")
+
                 return True
         except Exception as e:
             print(f"Failed to setup repository: {e}")
@@ -133,17 +150,25 @@ class GitManager:
             return []
 
     def pull_changes(self) -> bool:
-        """Pull latest changes from remote."""
+        """Pull latest changes from remote and update submodules."""
         if not self.repo:
             raise RuntimeError("Repository not initialized")
 
         try:
+            # Pull main repository changes
             origin = self.repo.remotes.origin
             origin.pull()
             print("Successfully pulled latest changes")
+
+            # Update submodules to commits recorded in main repository
+            for submodule in self.repo.submodules:
+                print(f"Updating submodule: {submodule.name}")
+                submodule.update(recursive=True)
+            print("Successfully updated all submodules")
+
             return True
         except Exception as e:
-            print(f"Failed to pull changes: {e}")
+            print(f"Failed to pull changes or update submodules: {e}")
             return False
 
     def get_file_content(self, file_path: str) -> Optional[str]:

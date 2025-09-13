@@ -67,6 +67,23 @@ class TestSyncCoordinator:
         mock_print.assert_called_with("Starting initial setup...")
 
     @patch("builtins.print")
+    def test_initial_setup_repo_auth_failure(self, mock_print):
+        """Test initial setup when repository authentication fails."""
+        # Simulate authentication failure during setup
+        self.coordinator.git_manager.setup_repository.return_value = False
+
+        result = self.coordinator.initial_setup()
+
+        # Should return failure and not proceed to full_sync
+        expected = {"success": False, "error": "Failed to setup repository"}
+        assert result == expected
+        self.coordinator.git_manager.setup_repository.assert_called_once()
+        # Verify full_sync is not called when repo setup fails
+        with patch.object(self.coordinator, "full_sync") as mock_full_sync:
+            self.coordinator.initial_setup()
+            mock_full_sync.assert_not_called()
+
+    @patch("builtins.print")
     def test_full_sync_no_files(self, mock_print):
         """Test full sync when no markdown files exist."""
         self.coordinator.git_manager.get_all_markdown_files.return_value = []

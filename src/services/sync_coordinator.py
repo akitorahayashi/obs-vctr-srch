@@ -199,20 +199,32 @@ class SyncCoordinator:
             # Repository info
             repo_files = len(self.git_manager.get_all_markdown_files())
 
+            repository_info = {
+                "url": self.git_manager.repo_url,
+                "local_path": str(self.git_manager.local_path),
+                "branch": self.git_manager.branch,
+                "total_md_files": repo_files,
+                "status": "available",
+            }
+
+            # Add commit info directly to repository level if available
+            if sync_info and "commit_hash" in sync_info:
+                repository_info["commit_hash"] = sync_info["commit_hash"]
+                repository_info["last_sync"] = sync_info["commit_date"]
+
             return {
-                "repository": {
-                    "url": self.git_manager.repo_url,
-                    "local_path": str(self.git_manager.local_path),
-                    "branch": self.git_manager.branch,
-                    "last_commit": sync_info,
-                    "total_md_files": repo_files,
-                },
+                "repository": repository_info,
                 "vector_store": vector_stats,
                 "sync_status": "ready",
             }
 
         except Exception as e:
-            return {"error": str(e)}
+            return {
+                "repository": {"status": "error", "error": str(e)},
+                "vector_store": {"status": "error", "error": str(e)},
+                "sync_status": "error",
+                "error": str(e),
+            }
 
     def cleanup_orphaned_embeddings(self) -> Dict[str, int]:
         """Remove embeddings for files that no longer exist in the repository."""

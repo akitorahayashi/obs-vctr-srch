@@ -1,9 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.config.settings import Settings, get_settings
-from src.schemas import SearchRequest, SearchResult
+from src.schemas import SearchRequest
 from src.services import SyncCoordinator
 from src.services.vector_store import VectorStore
 
@@ -35,15 +35,43 @@ def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoor
 
 
 @router.post("/sync", response_model=Dict[str, Any])
-async def sync_repository(full_sync: bool = False):
+async def sync_repository(
+    full_sync: bool = False,
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+):
     """Synchronize repository with incremental or full sync."""
-    return {"status": "sync would happen", "full_sync": full_sync}
+    try:
+        if full_sync:
+            result = coordinator.full_sync()
+        else:
+            result = coordinator.incremental_sync()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 
-@router.post("/search", response_model=List[SearchResult])
-async def search_documents(request: SearchRequest):
+@router.post("/search", response_model=Dict[str, Any])
+async def search_documents(
+    request: SearchRequest, coordinator: SyncCoordinator = Depends(get_sync_coordinator)
+):
     """Search documents in the vector store."""
-    return []
+    # Validate request
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    if request.n_results < 1:
+        raise HTTPException(status_code=400, detail="n_results must be positive")
+
+    try:
+        results = coordinator.search_documents(
+            query=request.query,
+            n_results=request.n_results,
+            file_filter=request.file_filter,
+            tag_filter=request.tag_filter,
+        )
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
 @router.get("/health")
@@ -53,14 +81,16 @@ async def obs_health_check():
 
 
 @router.get("/status", response_model=Dict[str, Any])
-async def get_status():
+async def get_status(coordinator: SyncCoordinator = Depends(get_sync_coordinator)):
     """Get repository and vector store status."""
-    # Simple status without heavy initialization
-    return {
-        "sync_status": "ready",
-        "repository": {"status": "available"},
-        "vector_store": {"status": "available"},
-    }
+    try:
+        return coordinator.get_repository_status()
+    except Exception as e:
+        return {
+            "sync_status": "error",
+            "repository": {"status": "error", "error": str(e)},
+            "vector_store": {"status": "error", "error": str(e)},
+        }
 
 
 @router.post("/reindex/{file_path:path}", response_model=Dict[str, Any])
@@ -77,7 +107,11 @@ async def build_index(settings: Settings = Depends(get_settings)):
     if getattr(sc.git_manager, "repo", None) is None:
         result = sc.initial_setup()
         return {"status": "build-index complete", "result": result}
-    # Repository exists: clear existing index and rebuild
+    # Repository exists: update repository, clear existing index and rebuild
+    # First update repository to latest (including submodules)
+    if not sc.git_manager.pull_changes():
+        raise HTTPException(status_code=500, detail="Failed to update repository")
+
     import shutil
     from pathlib import Path
 
