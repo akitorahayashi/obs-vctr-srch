@@ -16,3 +16,19 @@ services:
       retries: 10
     restart: unless-stopped
 
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "${HOST_BIND_IP}:${ADMIN_PORT}:8010"
+    env_file:
+      - .env
+    environment:
+      - OBS_API_URL=http://api:8000
+    command: ["python", "-m", "src.apps.admin.app"]
+    depends_on:
+      - api
+    restart: unless-stopped
+

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Build Index Progress</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .progress-bar { 
+            width: 100%; 
+            height: 30px; 
+            background-color: #f0f0f0; 
+            border-radius: 15px; 
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-fill { 
+            height: 100%; 
+            background-color: #4CAF50; 
+            width: 0%; 
+            transition: width 0.3s ease;
+            border-radius: 15px;
+        }
+        .status { 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            background-color: #f8f9fa;
+        }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        .success { background-color: #d4edda; color: #155724; }
+        .log { 
+            height: 400px; 
+            overflow-y: auto; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .stats { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+            gap: 10px; 
+            margin: 20px 0;
+        }
+        .stat-card { 
+            padding: 15px; 
+            background-color: #f8f9fa; 
+            border-radius: 5px; 
+            text-align: center;
+        }
+        .stat-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        .stat-label { font-size: 12px; color: #6c757d; }
+        button { 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Build Index Progress Monitor</h1>
+        
+        <div>
+            <button id="startBtn" onclick="startBuildIndex()">Start Build Index</button>
+            <button id="stopBtn" onclick="stopBuildIndex()" disabled>Stop</button>
+        </div>
+
+        <div class="status" id="currentStatus">
+            Ready to start build index process
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div id="progressText">Progress: 0%</div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalFiles">-</div>
+                <div class="stat-label">Total Files</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="currentFile">-</div>
+                <div class="stat-label">Current File</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="processed">-</div>
+                <div class="stat-label">Processed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="failed">-</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="eta">-</div>
+                <div class="stat-label">ETA</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalTime">-</div>
+                <div class="stat-label">Total Time</div>
+            </div>
+        </div>
+
+        <h3>Log</h3>
+        <div class="log" id="logContainer"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let startTime = null;
+
+        function startBuildIndex() {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('logContainer').innerHTML = '';
+            
+            startTime = new Date();
+            updateCurrentStatus('Starting build index...', 'status');
+            
+            eventSource = new EventSource('http://127.0.0.1:8005/api/obs-vctr-srch/build-index-stream', {
+                withCredentials: false
+            });
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleProgressUpdate(data);
+                } catch (e) {
+                    console.error('Failed to parse SSE data:', e);
+                    addLog('Error: Failed to parse server response', 'error');
+                }
+            };
+
+            eventSource.onerror = function(event) {
+                console.error('SSE error:', event);
+                addLog('Connection error occurred', 'error');
+                stopBuildIndex();
+            };
+
+            eventSource.onopen = function(event) {
+                addLog('Connected to build index stream', 'success');
+            };
+        }
+
+        function stopBuildIndex() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            updateCurrentStatus('Stopped', 'warning');
+        }
+
+        function handleProgressUpdate(data) {
+            addLog(`[${data.type}] ${data.message}`, data.type);
+            
+            switch (data.type) {
+                case 'status':
+                    updateCurrentStatus(data.message, 'status');
+                    if (data.progress !== undefined) {
+                        updateProgress(data.progress);
+                    }
+                    if (data.total_files !== undefined) {
+                        document.getElementById('totalFiles').textContent = data.total_files;
+                    }
+                    break;
+                    
+                case 'progress':
+                    updateCurrentStatus(data.message, 'status');
+                    updateProgress(data.progress);
+                    if (data.current_file !== undefined) {
+                        document.getElementById('currentFile').textContent = data.current_file;
+                    }
+                    if (data.eta !== undefined) {
+                        document.getElementById('eta').textContent = data.eta;
+                    }
+                    break;
+                    
+                case 'file_complete':
+                    updateCurrentStatus(data.message, 'success');
+                    break;
+                    
+                case 'complete':
+                    updateCurrentStatus(data.message, 'success');
+                    updateProgress(100);
+                    if (data.stats) {
+                        document.getElementById('processed').textContent = data.stats.processed;
+                        document.getElementById('failed').textContent = data.stats.failed;
+                    }
+                    if (data.total_time_seconds) {
+                        document.getElementById('totalTime').textContent = data.total_time_seconds + 's';
+                    }
+                    stopBuildIndex();
+                    break;
+                    
+                case 'error':
+                    updateCurrentStatus(data.message, 'error');
+                    stopBuildIndex();
+                    break;
+                    
+                case 'warning':
+                    updateCurrentStatus(data.message, 'warning');
+                    break;
+            }
+        }
+
+        function updateCurrentStatus(message, type) {
+            const statusElement = document.getElementById('currentStatus');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+
+        function updateProgress(percentage) {
+            document.getElementById('progressFill').style.width = percentage + '%';
+            document.getElementById('progressText').textContent = `Progress: ${Math.round(percentage)}%`;
+        }
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Update total time periodically when running
+        setInterval(() => {
+            if (startTime && eventSource && eventSource.readyState === EventSource.OPEN) {
+                const elapsed = Math.floor((new Date() - startTime) / 1000);
+                document.getElementById('totalTime').textContent = elapsed + 's';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

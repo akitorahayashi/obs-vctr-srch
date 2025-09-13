@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Obsidian Vector Search Admin{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        📊 System Status
+    </div>
+    <div class="card-body">
+        <div id="statusDisplay">
+            <p>Loading system status...</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        📁 Repository Information
+    </div>
+    <div class="card-body">
+        <div id="repositoryInfo">
+            <p>Loading repository information...</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        🛠️ Quick Actions
+    </div>
+    <div class="card-body">
+        <a href="/build-index-monitor" class="btn btn-primary">
+            🚀 Build Index Monitor
+        </a>
+        <a href="{{ api_base_url }}/api/obs-vctr-srch/status" target="_blank" class="btn btn-success">
+            📋 View API Status
+        </a>
+        <a href="{{ api_base_url }}/docs" target="_blank" class="btn btn-warning">
+            📖 API Documentation
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_BASE_URL = '{{ api_base_url }}';
+    
+    async function loadSystemStatus() {
+        try {
+            const response = await fetch('/api/status');
+            const data = await response.json();
+            
+            const statusHtml = `
+                <div style="margin-bottom: 20px;">
+                    <h4>API Connection</h4>
+                    <p>
+                        <span class="status-indicator ${data.status === 'healthy' ? 'status-healthy' : 'status-unhealthy'}"></span>
+                        ${data.status === 'healthy' ? 'Connected' : 'Disconnected'} - ${data.api_url}
+                    </p>
+                    ${data.error ? `<p style="color: #dc3545; margin-top: 10px;">Error: ${data.error}</p>` : ''}
+                </div>
+                
+                ${data.api_health ? `
+                    <div style="margin-bottom: 20px;">
+                        <h4>Main API Health</h4>
+                        <p><span class="status-indicator status-healthy"></span>Status: ${data.api_health.status}</p>
+                    </div>
+                ` : ''}
+                
+                ${data.obs_health ? `
+                    <div>
+                        <h4>Obsidian Vector Search API</h4>
+                        <p><span class="status-indicator status-healthy"></span>Status: ${data.obs_health.status}</p>
+                    </div>
+                ` : ''}
+            `;
+            
+            document.getElementById('statusDisplay').innerHTML = statusHtml;
+        } catch (error) {
+            document.getElementById('statusDisplay').innerHTML = `
+                <p style="color: #dc3545;">Failed to load system status: ${error.message}</p>
+            `;
+        }
+    }
+    
+    async function loadRepositoryInfo() {
+        try {
+            const response = await fetch('/api/repository-status');
+            const data = await response.json();
+            
+            if (data.error) {
+                document.getElementById('repositoryInfo').innerHTML = `
+                    <p style="color: #dc3545;">Error loading repository info: ${data.error}</p>
+                `;
+                return;
+            }
+            
+            const repoHtml = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                    <div>
+                        <h4>Repository</h4>
+                        <p><strong>URL:</strong> ${data.repository?.url || 'N/A'}</p>
+                        <p><strong>Branch:</strong> ${data.repository?.branch || 'N/A'}</p>
+                        <p><strong>Total MD Files:</strong> ${data.repository?.total_md_files || 'N/A'}</p>
+                        ${data.repository?.last_sync ? `<p><strong>Last Sync:</strong> ${new Date(data.repository.last_sync).toLocaleString()}</p>` : ''}
+                    </div>
+                    
+                    <div>
+                        <h4>Vector Store</h4>
+                        <p><strong>Total Documents:</strong> ${data.vector_store?.total_documents || 'N/A'}</p>
+                        <p><strong>Total Chunks:</strong> ${data.vector_store?.total_chunks || 'N/A'}</p>
+                        <p><strong>Status:</strong> ${data.vector_store?.status || 'N/A'}</p>
+                    </div>
+                    
+                    <div>
+                        <h4>Sync Status</h4>
+                        <p>
+                            <span class="status-indicator ${data.sync_status === 'ready' ? 'status-healthy' : 'status-unhealthy'}"></span>
+                            ${data.sync_status || 'Unknown'}
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('repositoryInfo').innerHTML = repoHtml;
+        } catch (error) {
+            document.getElementById('repositoryInfo').innerHTML = `
+                <p style="color: #dc3545;">Failed to load repository info: ${error.message}</p>
+            `;
+        }
+    }
+    
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSystemStatus();
+        loadRepositoryInfo();
+    });
+    
+    // Refresh data every 30 seconds
+    setInterval(() => {
+        loadSystemStatus();
+        loadRepositoryInfo();
+    }, 30000);
+</script>
+{% endblock %}
