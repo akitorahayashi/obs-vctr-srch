@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from src.api import router
+from src.apps.api import router
 
 app = FastAPI(
     title="Obsidian Vector Search API",
@@ -10,14 +10,6 @@ app = FastAPI(
 
 # Include routers
 app.include_router(router.router, prefix="/api")
-
-
-@app.get("/")
-async def hello_world():
-    """
-    Hello World endpoint.
-    """
-    return {"message": "Hello World"}
 
 
 @app.get("/health")

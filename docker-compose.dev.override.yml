@@ -7,15 +7,4 @@ services:
     volumes:
       - .:/app
       - /app/.venv
-      - chroma-db-dev:/app/chroma_db
-      - obsidian-vault-dev:/app/obsidian-vault
 
-volumes:
-  chroma-db-dev:
-    driver: local
-    name: ${PROJECT_NAME}-chroma-db-dev
-    external: false
-  obsidian-vault-dev:
-    driver: local
-    name: ${PROJECT_NAME}-obsidian-vault-dev
-    external: false

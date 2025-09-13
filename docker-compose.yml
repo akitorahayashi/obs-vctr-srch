@@ -8,9 +8,6 @@ services:
       - "${HOST_BIND_IP}:${HOST_PORT}:8000"
     env_file:
       - .env
-    # volumes:
-      # - chroma-db:/app/chroma_db
-      # - obsidian-vault:/app/obsidian-vault
     healthcheck:
       test: [ "CMD", "python", "-c", "import sys, urllib.request; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').getcode() == 200 else sys.exit(1)" ]
       interval: 30s
@@ -19,12 +16,3 @@ services:
       retries: 10
     restart: unless-stopped
 
-volumes:
-  chroma-db:
-    driver: local
-    name: ${PROJECT_NAME}-chroma-db-prod
-    external: false
-  obsidian-vault:
-    driver: local
-    name: ${PROJECT_NAME}-obsidian-vault-prod
-    external: false

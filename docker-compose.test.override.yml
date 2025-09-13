@@ -4,16 +4,5 @@ services:
       target: development
     ports: !override
       - "${HOST_BIND_IP}:${TEST_PORT}:8000"
-    volumes:
-      - chroma-db-test:/app/chroma_db
-      - obsidian-vault-test:/app/obsidian-vault
+    volumes: []
 
-volumes:
-  chroma-db-test:
-    driver: local
-    name: ${PROJECT_NAME}-chroma-db-test
-    external: false
-  obsidian-vault-test:
-    driver: local
-    name: ${PROJECT_NAME}-obsidian-vault-test
-    external: false
