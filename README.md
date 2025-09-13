@@ -45,15 +45,6 @@ Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now har
    - **Expiration**: Choose appropriate expiration (90 days recommended)
    - **Scopes**: Select the following permissions:
 
-```
-✅ repo (Full control of private repositories)
-   ├── ✅ repo:status (Access commit status)
-   ├── ✅ repo_deployment (Access deployment status)
-   ├── ✅ public_repo (Access public repositories)
-   ├── ✅ repo:invite (Access repository invitations)
-   └── ✅ security_events (Read and write security events)
-```
-
 4. **For private repositories** (recommended scope):
    - ✅ **repo** - Full control of private repositories
    
@@ -97,7 +88,7 @@ Interactive API documentation is available when the server is running:
 | `make down` | Stop development containers |
 | `make test` | Run all tests |
 | `make unit-test` | Run unit tests only |
-| `make db-test` | Run database tests only |
+| `make intg-test` | Run integration tests only |
 | `make e2e-test` | Run end-to-end tests only |
 | `make format` | Format code with Black and fix with Ruff |
 | `make lint` | Check code format and lint |
