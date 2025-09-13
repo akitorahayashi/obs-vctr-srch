@@ -143,17 +143,17 @@ test: unit-test intg-test build-test e2e-test ## Run the full test suite
 .PHONY: unit-test
 unit-test: ## Run the unit tests locally
 	@echo "Running unit tests..."
-	@uv run pytest tests/unit -s
+	@uv run pytest tests/unit -v -s
 
 .PHONY: intg-test
 intg-test: ## Run integration tests locally
 	@echo "Running integration tests..."
-	@uv run pytest tests/intg -s
+	@uv run pytest tests/intg -v -s
 
 .PHONY: e2e-test
 e2e-test: ## Run end-to-end tests against a live application stack
 	@echo "Running end-to-end tests..."
-	@uv run pytest tests/e2e -s
+	@uv run pytest tests/e2e -v -s
 
 .PHONY: build-test
 build-test: ## Build Docker image for testing without leaving artifacts
