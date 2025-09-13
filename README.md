@@ -28,7 +28,7 @@ This installs dependencies with uv and creates `.env` file from `.env.example`.
 Edit `.env` to configure your Obsidian repository:
 ```env
 OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obs-vault.git
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OBS_VAULT_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 ```
 
@@ -53,7 +53,7 @@ Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now har
 
 6. **Copy token**: After creation, copy the token immediately (it won't be shown again)
 
-7. **Add to .env**: Paste the token as `GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+7. **Add to .env**: Paste the token as `OBS_VAULT_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
 #### Security Notes
 - ⚠️ **Never commit** the `.env` file with real tokens

@@ -22,4 +22,6 @@ jobs:
         run: uv sync --only-group dev --frozen
 
       - name: Run Linters
-        run: uv run make lint
+        run: |
+          source .venv/bin/activate
+          make lint

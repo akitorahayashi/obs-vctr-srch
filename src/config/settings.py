@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Obsidian Vector Search settings
     OBSIDIAN_REPO_URL: str = "https://github.com/akitorahayashi/obs-vault.git"
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-mpnet-base-v2"
-    GITHUB_TOKEN: str = ""  # For private repositories
+    OBS_VAULT_TOKEN: str = ""  # For private repositories
 
     # Hardcoded paths and branch - these don't change
     OBSIDIAN_LOCAL_PATH: str = "./obs-vault"
