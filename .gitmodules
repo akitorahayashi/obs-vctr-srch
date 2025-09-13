@@ -1,3 +1,0 @@
-[submodule "obs-vault"]
-	path = obs-vault
-	url = git@github.com:akitorahayashi/obs-vault.git
