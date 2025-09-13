@@ -28,7 +28,7 @@ This installs dependencies with uv and creates `.env` file from `.env.example`.
 Edit `.env` to configure your Obsidian repository:
 ```env
 OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obs-vault.git
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OBS_VAULT_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 ```
 
@@ -45,15 +45,6 @@ Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now har
    - **Expiration**: Choose appropriate expiration (90 days recommended)
    - **Scopes**: Select the following permissions:
 
-```
-✅ repo (Full control of private repositories)
-   ├── ✅ repo:status (Access commit status)
-   ├── ✅ repo_deployment (Access deployment status)
-   ├── ✅ public_repo (Access public repositories)
-   ├── ✅ repo:invite (Access repository invitations)
-   └── ✅ security_events (Read and write security events)
-```
-
 4. **For private repositories** (recommended scope):
    - ✅ **repo** - Full control of private repositories
    
@@ -62,7 +53,7 @@ Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now har
 
 6. **Copy token**: After creation, copy the token immediately (it won't be shown again)
 
-7. **Add to .env**: Paste the token as `GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+7. **Add to .env**: Paste the token as `OBS_VAULT_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
 #### Security Notes
 - ⚠️ **Never commit** the `.env` file with real tokens
@@ -97,7 +88,7 @@ Interactive API documentation is available when the server is running:
 | `make down` | Stop development containers |
 | `make test` | Run all tests |
 | `make unit-test` | Run unit tests only |
-| `make db-test` | Run database tests only |
+| `make intg-test` | Run integration tests only |
 | `make e2e-test` | Run end-to-end tests only |
 | `make format` | Format code with Black and fix with Ruff |
 | `make lint` | Check code format and lint |

@@ -23,7 +23,7 @@ def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoor
                 local_path=settings.OBSIDIAN_LOCAL_PATH,
                 vector_store_path=settings.VECTOR_DB_PATH,
                 branch=settings.OBSIDIAN_BRANCH,
-                github_token=settings.GITHUB_TOKEN,
+                github_token=settings.OBS_VAULT_TOKEN,
                 embedding_model=settings.EMBEDDING_MODEL_NAME,
             )
         except Exception as e:
