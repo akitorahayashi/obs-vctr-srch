@@ -1,11 +1,11 @@
 import os
-import subprocess
 import time
 from typing import Generator
 
 import httpx
 import pytest
 from dotenv import load_dotenv
+from testcontainers.compose import DockerCompose
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,95 +18,70 @@ os.environ["TEST_PORT"] = os.getenv("TEST_PORT", "8005")
 @pytest.fixture(scope="session", autouse=True)
 def e2e_setup() -> Generator[None, None, None]:
     """
-    Manages the lifecycle of the application for end-to-end testing.
+    Manages the lifecycle of the application for end-to-end testing using testcontainers.
     """
-    # Determine if sudo should be used based on environment variable
-    use_sudo = os.getenv("SUDO") == "true"
-    docker_command = ["sudo", "docker"] if use_sudo else ["docker"]
-
     host_bind_ip = os.getenv("HOST_BIND_IP", "127.0.0.1")
     host_port = os.getenv("TEST_PORT", "8005")
     health_url = f"http://{host_bind_ip}:{host_port}/health"
 
-    # Get project name from environment
-    project_name = os.getenv("PROJECT_NAME", "obs-vctr-srch")
-    test_project_name = f"{project_name}-test"
-
-    # Define compose commands
-    compose_up_command = docker_command + [
-        "compose",
-        "-f",
-        "docker-compose.yml",
-        "-f",
-        "docker-compose.test.override.yml",
-        "--project-name",
-        test_project_name,
-        "up",
-        "-d",
-    ]
-    compose_down_command = docker_command + [
-        "compose",
-        "-f",
-        "docker-compose.yml",
-        "-f",
-        "docker-compose.test.override.yml",
-        "--project-name",
-        test_project_name,
-        "down",
-        "--remove-orphans",
-    ]
+    # Initialize Docker Compose with testcontainers
+    compose = DockerCompose(
+        ".",
+        compose_file_name=["docker-compose.yml", "docker-compose.test.override.yml"],
+    )
 
     try:
-        subprocess.run(compose_up_command, check=True, timeout=300)  # 5 minutes timeout
+        # Start the containers
+        compose.start()
 
         # Health Check
         start_time = time.time()
-        timeout = 120  # 2 minutes for basic API health check
+        timeout = 30  # 30 seconds for basic API health check
         is_healthy = False
         while time.time() - start_time < timeout:
             try:
                 response = httpx.get(health_url, timeout=5)
                 if response.status_code == 200:
                     print("✅ API is healthy!")
-                    is_healthy = True
-                    break
+                    # Also check if obs endpoints are available
+                    obs_health_url = (
+                        f"http://{host_bind_ip}:{host_port}/api/obs-vctr-srch/health"
+                    )
+                    try:
+                        obs_response = httpx.get(obs_health_url, timeout=5)
+                        print(
+                            f"🔍 /api/obs-vctr-srch/health response: {obs_response.status_code}"
+                        )
+                        if obs_response.status_code == 200:
+                            print("✅ Obs endpoints are ready!")
+                            is_healthy = True
+                            break
+                        else:
+                            print(
+                                f"⏳ Obs endpoints not ready yet, response: {obs_response.status_code}"
+                            )
+                            # Try to get more info about the error
+                            print(f"Response content: {obs_response.text}")
+                    except Exception as obs_e:
+                        print(f"❌ Error checking obs endpoint: {obs_e}")
             except httpx.RequestError as e:
                 print(
                     f"⏳ API not yet healthy, retrying... URL: {health_url}, Error: {e}"
                 )
-            time.sleep(5)
+            time.sleep(3)
 
         if not is_healthy:
-            subprocess.run(
-                docker_command
-                + [
-                    "compose",
-                    "-f",
-                    "docker-compose.yml",
-                    "-f",
-                    "docker-compose.test.override.yml",
-                    "--project-name",
-                    test_project_name,
-                    "logs",
-                    "api",
-                ]
-            )
-            # Ensure teardown on health check failure
             print("\n🛑 Stopping E2E services due to health check failure...")
-            subprocess.run(compose_down_command, check=False)
+            compose.stop()
             pytest.fail(f"API did not become healthy within {timeout} seconds.")
 
         yield
 
-    except subprocess.CalledProcessError as e:
-        print("\n🛑 compose up failed; performing cleanup...")
-        if hasattr(e, "stdout") and hasattr(e, "stderr"):
-            print(f"Exit code: {e.returncode}")
-            print(f"STDOUT: {e.stdout}")
-            print(f"STDERR: {e.stderr}")
-        subprocess.run(compose_down_command, check=False)
+    except Exception as e:
+        print(f"\n🛑 Failed to start services: {e}")
+        compose.stop()
         raise
     finally:
         # Stop services
         print("\n🛑 Stopping E2E services...")
-        subprocess.run(compose_down_command, check=False)
+        compose.stop()

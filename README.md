@@ -27,13 +27,12 @@ This installs dependencies with uv and creates `.env` file from `.env.example`.
 
 Edit `.env` to configure your Obsidian repository:
 ```env
-OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obsidian-vault.git
+OBSIDIAN_REPO_URL=https://github.com/yourusername/your-obs-vault.git
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OBSIDIAN_LOCAL_PATH=./obsidian-vault
-OBSIDIAN_BRANCH=main
-VECTOR_DB_PATH=./chroma_db
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 ```
+
+Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now hardcoded in the settings.
 
 #### GitHub Personal Access Token Setup
 
@@ -120,7 +119,7 @@ src/
 
 tests/
 ├── unit/            # Unit tests (TestClient)
-├── db/              # Database tests (testcontainers)
+├── intg/            # Integration tests
 └── e2e/             # End-to-end tests (testcontainers + HTTP)
 
 alembic/             # Database migrations
@@ -146,7 +145,7 @@ Configure in `.env`:
 The project includes three types of tests:
 
 - **Unit Tests**: Fast tests using FastAPI TestClient
-- **Database Tests**: PostgreSQL integration tests using testcontainers
+- **Integration Tests**: API endpoint tests  
 - **E2E Tests**: Full stack tests using Docker Compose via testcontainers
 
 All tests run independently without external dependencies.

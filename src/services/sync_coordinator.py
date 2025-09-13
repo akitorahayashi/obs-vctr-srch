@@ -28,9 +28,6 @@ class SyncCoordinator:
 
         self.local_path = Path(local_path)
 
-        # Check model compatibility on initialization
-        self._check_and_handle_model_change()
-
     def initial_setup(self) -> Dict[str, any]:
         """Perform initial repository setup and full sync."""
         print("Starting initial setup...")
@@ -281,28 +278,34 @@ class SyncCoordinator:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def _check_and_handle_model_change(self) -> None:
-        """Check for model changes and handle them automatically."""
+    def rebuild_index(self) -> Dict[str, any]:
+        """Rebuild the entire vector index by clearing existing data and re-indexing all files."""
         try:
-            compatibility_check = self.vector_store.check_model_compatibility()
+            print("🗑️  Clearing existing vector index...")
 
-            if not compatibility_check["compatible"]:
-                print(f"🔄 Model change detected: {compatibility_check['message']}")
-                print("🗑️  Clearing existing embeddings to ensure compatibility...")
+            # Clear the collection
+            clear_result = self.vector_store.clear_collection()
 
-                # Clear the collection
-                clear_result = self.vector_store.clear_collection()
+            if not clear_result["success"]:
+                return {"success": False, "error": clear_result["message"]}
 
-                if clear_result["success"]:
-                    print(f"✅ {clear_result['message']}")
-                    print("🔄 Full sync will be required on next operation.")
-                else:
-                    print(f"❌ Warning: {clear_result['message']}")
+            print("✅ Vector index cleared successfully")
+            print("🔄 Starting full re-indexing...")
+
+            # Perform full sync to rebuild index
+            sync_result = self.full_sync()
+
+            if sync_result["success"]:
+                return {
+                    "success": True,
+                    "message": "Vector index rebuilt successfully",
+                    "stats": sync_result["stats"],
+                }
             else:
-                print(
-                    f"✅ Model compatibility check passed: {compatibility_check['message']}"
-                )
+                return {
+                    "success": False,
+                    "error": f"Failed to rebuild index: {sync_result.get('error', 'Unknown error')}",
+                }
 
         except Exception as e:
-            print(f"⚠️  Model compatibility check failed: {e}")
-            print("🔄 Proceeding with caution - full sync recommended.")
+            return {"success": False, "error": str(e)}

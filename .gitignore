@@ -69,7 +69,4 @@ Desktop.ini
 # データベースファイル (ローカル開発用)
 *.sqlite3
 *.db
-
-# 外部リポジトリ
-obsidian-vault/
 chroma_db/

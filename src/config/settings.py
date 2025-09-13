@@ -13,12 +13,14 @@ class Settings(BaseSettings):
     """
 
     # Obsidian Vector Search settings
-    OBSIDIAN_REPO_URL: str = "https://github.com/akitorahayashi/obsidian-vault.git"
-    OBSIDIAN_LOCAL_PATH: str = "./obsidian-vault"
-    OBSIDIAN_BRANCH: str = "main"
-    VECTOR_DB_PATH: str = "./chroma_db"
+    OBSIDIAN_REPO_URL: str = "https://github.com/akitorahayashi/obs-vault.git"
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-mpnet-base-v2"
     GITHUB_TOKEN: str = ""  # For private repositories
+
+    # Hardcoded paths and branch - these don't change
+    OBSIDIAN_LOCAL_PATH: str = "./obs-vault"
+    OBSIDIAN_BRANCH: str = "main"
+    VECTOR_DB_PATH: str = "./chroma_db"
 
 
 @lru_cache
