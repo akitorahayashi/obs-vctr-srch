@@ -13,3 +13,5 @@ jobs:
 
   run-tests:
     uses: ./.github/workflows/run-tests.yml
+    secrets:
+      OBS_VAULT_TOKEN: ${{ secrets.OBS_VAULT_TOKEN }}
