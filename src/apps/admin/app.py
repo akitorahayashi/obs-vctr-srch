@@ -39,7 +39,6 @@ INTERNAL_API_URL = os.getenv("INTERNAL_API_URL", "http://api:8000")
 async def dashboard(request: Request):
     """Main admin dashboard."""
     return templates.TemplateResponse(
-        request,
         "dashboard.html",
         {"request": request, "api_base_url": INTERNAL_API_URL},
     )
@@ -49,7 +48,6 @@ async def dashboard(request: Request):
 async def build_index_monitor(request: Request):
     """Build index monitoring page."""
     return templates.TemplateResponse(
-        request,
         "build_index_monitor.html",
         {
             "request": request,
