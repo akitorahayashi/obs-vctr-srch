@@ -121,7 +121,7 @@ async def sync_stream(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -144,7 +144,7 @@ async def build_index_stream(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
+            "X-Accel-Buffering": "no",
         },
     )
 

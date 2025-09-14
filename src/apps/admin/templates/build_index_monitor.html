@@ -68,6 +68,14 @@
         <div class="stat-value" id="totalTime">-</div>
         <div class="stat-label">⏱️ Total Time</div>
     </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalDeleted">-</div>
+        <div class="stat-label">🗑️ Deleted</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalRenamed">-</div>
+        <div class="stat-label">📝 Renamed</div>
+    </div>
 </div>
 
 <div class="log-section">
@@ -81,7 +89,9 @@
 
 {% block scripts %}
 <script>
-    let eventSource = null;
+    let controller = null;
+    let streaming = false;
+    let buffer = '';
     let startTime = null;
     let totalProcessed = 0;
     let totalFailed = 0;
@@ -128,13 +138,16 @@
         updateConnectionStatus('Connecting...');
 
         try {
+            controller = new AbortController();
+            streaming = true;
             // Use fetch with POST to start the streaming operation
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Accept': 'text/event-stream',
                     'Cache-Control': 'no-cache'
-                }
+                },
+                signal: controller.signal
             });
 
             if (!response.ok) {
@@ -147,39 +160,50 @@
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
 
-            while (true) {
+            while (streaming) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-                            handleProgressUpdate(data);
-                        } catch (e) {
-                            console.error('Failed to parse SSE data:', e);
-                            addLog('Error: Failed to parse server response', 'error');
-                        }
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+                
+                for (const evt of events) {
+                    const dataLines = evt.split('\n').filter(l => l.startsWith('data: '));
+                    if (dataLines.length === 0) continue;
+                    const payload = dataLines.map(l => l.slice(6)).join('\n');
+                    try {
+                        const data = JSON.parse(payload);
+                        handleProgressUpdate(data);
+                    } catch (e) {
+                        console.error('Failed to parse SSE data:', e);
+                        addLog('Error: Failed to parse server response', 'error');
                     }
                 }
+            }
+            
+            // Process remaining buffer
+            if (buffer.includes('data: ')) {
+                try {
+                    const tail = buffer.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join('\n');
+                    if (tail) handleProgressUpdate(JSON.parse(tail));
+                } catch (_) {}
             }
         } catch (error) {
             console.error('Stream error:', error);
             addLog(`❌ Connection error: ${error.message}`, 'error');
             updateConnectionStatus('Connection Error');
         }
-
-        stopOperation();
+        
+        if (currentOperation) stopOperation();
     }
 
     function stopOperation() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
+        if (controller) {
+            controller.abort();
+            controller = null;
         }
+        streaming = false;
 
         const syncBtn = document.getElementById('startSyncBtn');
         const rebuildBtn = document.getElementById('startRebuildBtn');
@@ -193,7 +217,9 @@
         stopBtn.disabled = true;
 
         document.getElementById('etaDisplay').style.display = 'none';
-        updateCurrentStatus('Operation stopped', 'warning');
+        if (currentOperation) {
+            updateCurrentStatus('Operation stopped', 'warning');
+        }
         updateConnectionStatus('Disconnected');
         currentOperation = null;
     }
@@ -253,8 +279,8 @@
                     document.getElementById('totalTime').textContent = formatTime(data.total_time_seconds);
                 }
                 const operationName = currentOperation === 'sync' ? 'Sync' : 'Rebuild';
-                stopOperation();
                 addLog(`🎊 ${operationName} completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
+                stopOperation();
                 break;
 
             case 'error':
@@ -288,6 +314,8 @@
         document.getElementById('processed').textContent = totalProcessed;
         document.getElementById('failed').textContent = totalFailed;
         document.getElementById('totalChunks').textContent = totalChunks;
+        document.getElementById('totalDeleted').textContent = totalDeleted;
+        document.getElementById('totalRenamed').textContent = totalRenamed;
     }
 
     function addLog(message, type = 'info') {
