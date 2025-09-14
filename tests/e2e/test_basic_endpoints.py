@@ -30,15 +30,13 @@ class TestBasicEndpoints:
         assert "repository" in data
         assert "vector_store" in data
 
-    def test_all_endpoints_exist(self, client: TestClient):
-        """Test that all core endpoints are accessible (not 404)."""
+    def test_all_public_endpoints_exist(self, client: TestClient):
+        """Test that all public API endpoints are accessible (not 404)."""
         endpoints = [
             ("GET", "/health"),
             ("GET", "/docs"),
             ("GET", "/api/obs-vctr-srch/health"),
             ("GET", "/api/obs-vctr-srch/status"),
-            ("POST", "/api/obs-vctr-srch/sync"),
-            ("POST", "/api/obs-vctr-srch/build-index"),
             ("POST", "/api/obs-vctr-srch/search"),
         ]
 
@@ -54,6 +52,19 @@ class TestBasicEndpoints:
                     response = client.post(endpoint)
 
             assert response.status_code != 404, f"{method} {endpoint} returned 404"
+
+    def test_admin_endpoints_removed_from_public_api(self, client: TestClient):
+        """Test that admin endpoints have been properly removed from public API."""
+        admin_endpoints = [
+            "/api/obs-vctr-srch/sync",
+            "/api/obs-vctr-srch/build-index",
+        ]
+
+        for endpoint in admin_endpoints:
+            response = client.post(endpoint)
+            assert (
+                response.status_code == 404
+            ), f"Admin endpoint {endpoint} should not exist in public API"
 
     def test_search_endpoint_structure(self, client: TestClient):
         """Test search endpoint returns proper structure (regardless of content)."""

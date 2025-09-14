@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from src.main import app
@@ -9,6 +10,10 @@ class TestAPIEndpoints:
     def setup_method(self):
         """Setup test client for each test method."""
         self.client = TestClient(app)
+
+    def teardown_method(self):
+        """Close test client after each test method."""
+        self.client.close()
 
     def test_health_check_endpoint(self):
         """Test health check endpoint functionality."""
@@ -27,77 +32,62 @@ class TestAPIEndpoints:
         assert "repository" in response_data
         assert "vector_store" in response_data
 
-    def test_obsidian_sync_endpoint_exists(self):
-        """Test that Obsidian sync endpoint exists."""
-        response = self.client.post("/api/obs-vctr-srch/sync")
-        assert response.status_code != 404
+    @pytest.mark.parametrize(
+        "endpoint",
+        [
+            "/api/obs-vctr-srch/sync",
+            "/api/obs-vctr-srch/build-index",
+        ],
+    )
+    def test_admin_endpoints_removed_from_public_api(self, endpoint):
+        """Test that admin endpoints have been removed from public API."""
+        response = self.client.post(endpoint)
+        assert (
+            response.status_code == 404
+        ), f"Admin endpoint {endpoint} should not exist in public API"
 
     def test_obsidian_search_endpoint_exists(self):
         """Test that Obsidian search endpoint exists."""
         response = self.client.post("/api/obs-vctr-srch/search", json={"query": "test"})
         assert response.status_code != 404
 
-    def test_api_endpoints_accessibility(self):
-        """Test that all API endpoints are properly loaded and accessible."""
-        endpoints_to_test = [
+    @pytest.mark.parametrize(
+        "endpoint,method",
+        [
             ("/api/obs-vctr-srch/status", "GET"),
-            ("/api/obs-vctr-srch/sync", "POST"),
             ("/api/obs-vctr-srch/search", "POST"),
-        ]
+            ("/api/obs-vctr-srch/health", "GET"),
+        ],
+    )
+    def test_api_endpoints_accessibility(self, endpoint, method):
+        """Test that public API endpoints are properly loaded and accessible."""
+        if method == "GET":
+            response = self.client.get(endpoint)
+        elif method == "POST":
+            response = self.client.post(
+                endpoint, json={"query": "test"} if "search" in endpoint else {}
+            )
 
-        for endpoint, method in endpoints_to_test:
-            if method == "GET":
-                response = self.client.get(endpoint)
-            elif method == "POST":
-                response = self.client.post(
-                    endpoint, json={"query": "test"} if "search" in endpoint else {}
-                )
-
-            # Should not be 404 (endpoint exists)
-            assert (
-                response.status_code != 404
-            ), f"Endpoint {method} {endpoint} should exist"
-
-    def test_search_endpoint_error_handling(self):
-        """Test search endpoint handles invalid requests properly."""
-        # Test empty query
-        response = self.client.post("/api/obs-vctr-srch/search", json={"query": ""})
-        assert response.status_code in [
-            400,
-            422,
-        ], "Empty query should return client error"
-
-        # Test missing query parameter
-        response = self.client.post("/api/obs-vctr-srch/search", json={})
-        assert response.status_code in [
-            400,
-            422,
-        ], "Missing query should return client error"
-
-        # Test invalid JSON
-        response = self.client.post("/api/obs-vctr-srch/search", json=None)
-        assert response.status_code in [
-            400,
-            422,
-        ], "Invalid JSON should return client error"
-
-        # Test invalid n_results
-        response = self.client.post(
-            "/api/obs-vctr-srch/search", json={"query": "test", "n_results": -1}
-        )
-        assert response.status_code in [
-            400,
-            422,
-        ], "Negative n_results should return client error"
-
-    def test_sync_endpoint_error_handling(self):
-        """Test sync endpoint handles errors gracefully."""
-        # Sync endpoint should exist and handle requests (may fail due to config but shouldn't crash)
-        response = self.client.post("/api/obs-vctr-srch/sync")
-        assert response.status_code != 404, "Sync endpoint should exist"
         assert (
-            response.status_code != 500
-        ), "Sync endpoint should not crash with 500 error"
+            response.status_code != 404
+        ), f"Endpoint {method} {endpoint} should exist in public API"
+
+    @pytest.mark.parametrize(
+        "payload,expected_status",
+        [
+            ({"query": ""}, [400, 422]),
+            ({}, [400, 422]),
+            (None, [400, 422]),
+            ({"query": "test", "n_results": -1}, [400, 422]),
+            ({"query": "test", "n_results": 9999}, [400, 422]),
+        ],
+    )
+    def test_search_endpoint_error_handling(self, payload, expected_status):
+        """Test search endpoint handles invalid requests properly."""
+        response = self.client.post("/api/obs-vctr-srch/search", json=payload)
+        assert (
+            response.status_code in expected_status
+        ), f"Request with {payload} should return client error"
 
     def test_status_endpoint_structure(self):
         """Test status endpoint returns consistent structure even on errors."""

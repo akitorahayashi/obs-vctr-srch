@@ -13,10 +13,13 @@
     </div>
     <div class="card-body">
         <div class="control-panel">
-            <button id="startBtn" class="btn btn-primary" onclick="startBuildIndex()">
-                ▶️ Start Build Index
+            <button id="startSyncBtn" class="btn btn-primary" onclick="startSync()">
+                ▶️ Start Incremental Sync
             </button>
-            <button id="stopBtn" class="btn btn-danger" onclick="stopBuildIndex()" disabled>
+            <button id="startRebuildBtn" class="btn btn-danger" onclick="startRebuild()">
+                🚀 Start Build Index
+            </button>
+            <button id="stopBtn" class="btn btn-secondary" onclick="stopOperation()" disabled>
                 ⏹️ Stop
             </button>
             <button class="btn btn-warning" onclick="clearLog()">🧹 Clear Log</button>
@@ -27,7 +30,7 @@
 
 <div class="progress-section">
     <div class="status info" id="currentStatus">
-        Ready to start build index process
+        Ready to start sync or rebuild operations
     </div>
 
     <div class="progress-bar">
@@ -65,6 +68,14 @@
         <div class="stat-value" id="totalTime">-</div>
         <div class="stat-label">⏱️ Total Time</div>
     </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalDeleted">-</div>
+        <div class="stat-label">🗑️ Deleted</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalRenamed">-</div>
+        <div class="stat-label">📝 Renamed</div>
+    </div>
 </div>
 
 <div class="log-section">
@@ -78,74 +89,139 @@
 
 {% block scripts %}
 <script>
-    const API_BASE_URL = '{{ api_base_url }}';
-    let eventSource = null;
+    let controller = null;
+    let streaming = false;
+    let buffer = '';
     let startTime = null;
     let totalProcessed = 0;
     let totalFailed = 0;
     let totalChunks = 0;
+    let totalDeleted = 0;
+    let totalRenamed = 0;
+    let currentOperation = null;
 
-    function startBuildIndex() {
-        const startBtn = document.getElementById('startBtn');
+    async function startSync() {
+        await startOperation('sync', 'Incremental Sync', '/api/sync');
+    }
+
+    async function startRebuild() {
+        await startOperation('rebuild', 'Build Index', '/api/build-index');
+    }
+
+    async function startOperation(operationType, operationName, endpoint) {
+        const syncBtn = document.getElementById('startSyncBtn');
+        const rebuildBtn = document.getElementById('startRebuildBtn');
         const stopBtn = document.getElementById('stopBtn');
 
-        startBtn.innerHTML = '<span class="loading-spinner"></span>Starting...';
-        startBtn.disabled = true;
+        // Disable both operation buttons
+        syncBtn.disabled = true;
+        rebuildBtn.disabled = true;
         stopBtn.disabled = false;
+
+        // Update button text based on operation
+        if (operationType === 'sync') {
+            syncBtn.innerHTML = '<span class="loading-spinner"></span>Syncing...';
+        } else {
+            rebuildBtn.innerHTML = '<span class="loading-spinner"></span>Rebuilding...';
+        }
 
         // Reset stats
         totalProcessed = 0;
         totalFailed = 0;
         totalChunks = 0;
+        totalDeleted = 0;
+        totalRenamed = 0;
+        currentOperation = operationType;
 
         startTime = new Date();
-        updateCurrentStatus('Connecting to build index stream...', 'info');
+        updateCurrentStatus(`Starting ${operationName}...`, 'info');
         updateConnectionStatus('Connecting...');
 
-        eventSource = new EventSource(`{{ external_api_url }}/api/obs-vctr-srch/build-index-stream`, {
-            withCredentials: false
-        });
+        try {
+            controller = new AbortController();
+            streaming = true;
+            // Use fetch with POST to start the streaming operation
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache'
+                },
+                signal: controller.signal
+            });
 
-        eventSource.onmessage = function (event) {
-            try {
-                const data = JSON.parse(event.data);
-                handleProgressUpdate(data);
-            } catch (e) {
-                console.error('Failed to parse SSE data:', e);
-                addLog('Error: Failed to parse server response', 'error');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        };
 
-        eventSource.onerror = function (event) {
-            console.error('SSE error:', event);
-            addLog('❌ Connection error occurred', 'error');
-            updateConnectionStatus('Connection Error');
-            stopBuildIndex();
-        };
-
-        eventSource.onopen = function (event) {
-            addLog('🔗 Connected to build index stream', 'success');
+            addLog(`🔗 Connected to ${operationName.toLowerCase()} stream`, 'success');
             updateConnectionStatus('Connected');
-            startBtn.innerHTML = '🔄 Building...';
-        };
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (streaming) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+                
+                for (const evt of events) {
+                    const dataLines = evt.split('\n').filter(l => l.startsWith('data: '));
+                    if (dataLines.length === 0) continue;
+                    const payload = dataLines.map(l => l.slice(6)).join('\n');
+                    try {
+                        const data = JSON.parse(payload);
+                        handleProgressUpdate(data);
+                    } catch (e) {
+                        console.error('Failed to parse SSE data:', e);
+                        addLog('Error: Failed to parse server response', 'error');
+                    }
+                }
+            }
+            
+            // Process remaining buffer
+            if (buffer.includes('data: ')) {
+                try {
+                    const tail = buffer.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join('\n');
+                    if (tail) handleProgressUpdate(JSON.parse(tail));
+                } catch (_) {}
+            }
+        } catch (error) {
+            console.error('Stream error:', error);
+            addLog(`❌ Connection error: ${error.message}`, 'error');
+            updateConnectionStatus('Connection Error');
+        }
+        
+        if (currentOperation) stopOperation();
     }
 
-    function stopBuildIndex() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
+    function stopOperation() {
+        if (controller) {
+            controller.abort();
+            controller = null;
         }
+        streaming = false;
 
-        const startBtn = document.getElementById('startBtn');
+        const syncBtn = document.getElementById('startSyncBtn');
+        const rebuildBtn = document.getElementById('startRebuildBtn');
         const stopBtn = document.getElementById('stopBtn');
 
-        startBtn.innerHTML = '▶️ Start Build Index';
-        startBtn.disabled = false;
+        // Reset button states
+        syncBtn.innerHTML = '▶️ Start Incremental Sync';
+        rebuildBtn.innerHTML = '🚀 Start Build Index';
+        syncBtn.disabled = false;
+        rebuildBtn.disabled = false;
         stopBtn.disabled = true;
 
         document.getElementById('etaDisplay').style.display = 'none';
-        updateCurrentStatus('Build process stopped', 'warning');
+        if (currentOperation) {
+            updateCurrentStatus('Operation stopped', 'warning');
+        }
         updateConnectionStatus('Disconnected');
+        currentOperation = null;
     }
 
     function updateConnectionStatus(status) {
@@ -195,18 +271,21 @@
                     totalProcessed = data.stats.processed;
                     totalFailed = data.stats.failed;
                     totalChunks = data.stats.total_chunks;
+                    totalDeleted = data.stats.deleted || 0;
+                    totalRenamed = data.stats.renamed || 0;
                     updateStats();
                 }
                 if (data.total_time_seconds) {
                     document.getElementById('totalTime').textContent = formatTime(data.total_time_seconds);
                 }
-                stopBuildIndex();
-                addLog(`🎊 Build completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
+                const operationName = currentOperation === 'sync' ? 'Sync' : 'Rebuild';
+                addLog(`🎊 ${operationName} completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
+                stopOperation();
                 break;
 
             case 'error':
                 updateCurrentStatus('❌ ' + data.message, 'error');
-                stopBuildIndex();
+                stopOperation();
                 break;
 
             case 'warning':
@@ -235,6 +314,8 @@
         document.getElementById('processed').textContent = totalProcessed;
         document.getElementById('failed').textContent = totalFailed;
         document.getElementById('totalChunks').textContent = totalChunks;
+        document.getElementById('totalDeleted').textContent = totalDeleted;
+        document.getElementById('totalRenamed').textContent = totalRenamed;
     }
 
     function addLog(message, type = 'info') {
@@ -269,13 +350,13 @@
 
     // Update total time periodically when running
     setInterval(() => {
-        if (startTime && eventSource && eventSource.readyState === EventSource.OPEN) {
+        if (startTime && currentOperation) {
             const elapsed = (new Date() - startTime) / 1000;
             document.getElementById('totalTime').textContent = formatTime(elapsed);
         }
     }, 1000);
 
     // Initial log entry
-    addLog('Build Index Monitor ready', 'info');
+    addLog('Admin Monitor ready - choose Sync or Rebuild operation', 'info');
 </script>
 {% endblock %}
