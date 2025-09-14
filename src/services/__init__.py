@@ -1,6 +1,13 @@
-from .git_manager import GitManager
-from .obsidian_processor import ObsidianProcessor
-from .sync_coordinator import SyncCoordinator
-from .vector_store import VectorStore
+"""Services for the application."""
 
-__all__ = ["GitManager", "ObsidianProcessor", "SyncCoordinator", "VectorStore"]
+from .git_manager_factory import (
+    create_git_manager,
+    create_git_manager_from_settings,
+)
+from .sync_coordinator import SyncCoordinator
+
+__all__ = [
+    "SyncCoordinator",
+    "create_git_manager",
+    "create_git_manager_from_settings",
+]

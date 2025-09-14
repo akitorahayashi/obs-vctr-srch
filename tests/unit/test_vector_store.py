@@ -5,9 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from src.models import FileChange
-from src.services.obsidian_processor import ObsidianDocument
-from src.services.vector_store import VectorStore
+from src.models import VectorStore
+from src.models.obsidian_processor import ObsidianDocument
+from src.schemas import FileChange
 
 
 class TestVectorStore:
@@ -20,8 +20,8 @@ class TestVectorStore:
         self.model_name = "test-model"
 
         with (
-            patch("src.services.vector_store.chromadb.PersistentClient"),
-            patch("src.services.vector_store.SentenceTransformer"),
+            patch("src.models.vector_store.chromadb.PersistentClient"),
+            patch("src.models.vector_store.SentenceTransformer"),
             patch("builtins.print"),
         ):
 
@@ -476,7 +476,7 @@ class TestVectorStore:
         assert result["current_model"] == self.model_name
         assert "Could not verify" in result["message"]
 
-    @patch("src.services.vector_store.chromadb.PersistentClient")
+    @patch("src.models.vector_store.chromadb.PersistentClient")
     def test_clear_collection_success(self, mock_client_class):
         """Test successful collection clearing."""
         # Mock client and collection operations

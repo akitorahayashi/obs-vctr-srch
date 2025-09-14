@@ -6,8 +6,8 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.models import FileChange
-from src.services.git_manager import GitManager
+from src.models import GitManager
+from src.schemas import FileChange
 
 
 class TestGitManager:
@@ -49,7 +49,7 @@ class TestGitManager:
         result = self.git_manager._build_clone_url()
         assert result == "https://gitlab.com/test/repo.git"
 
-    @patch("src.services.git_manager.Repo")
+    @patch("src.models.git_manager.Repo")
     @patch("pathlib.Path.exists")
     def test_setup_repository_existing_repo(self, mock_exists, mock_repo_class):
         """Test setup when repository already exists."""
@@ -70,7 +70,7 @@ class TestGitManager:
         assert self.git_manager.repo == mock_repo
         mock_repo_class.assert_called_once_with(self.git_manager.local_path)
 
-    @patch("src.services.git_manager.Repo")
+    @patch("src.models.git_manager.Repo")
     @patch("pathlib.Path.exists")
     def test_setup_repository_clone_new(self, mock_exists, mock_repo_class):
         """Test setup when cloning new repository."""
@@ -89,7 +89,7 @@ class TestGitManager:
             branch=self.branch,
         )
 
-    @patch("src.services.git_manager.Repo")
+    @patch("src.models.git_manager.Repo")
     @patch("pathlib.Path.exists")
     def test_setup_repository_failure(self, mock_exists, mock_repo_class):
         """Test setup repository failure."""
@@ -101,7 +101,7 @@ class TestGitManager:
         assert result is False
         assert self.git_manager.repo is None
 
-    @patch("src.services.git_manager.Repo")
+    @patch("src.models.git_manager.Repo")
     @patch("pathlib.Path.exists")
     def test_setup_repository_authentication_error(self, mock_exists, mock_repo_class):
         """Test setup repository with authentication error."""
@@ -124,7 +124,7 @@ class TestGitManager:
             branch=self.branch,
         )
 
-    @patch("src.services.git_manager.Repo")
+    @patch("src.models.git_manager.Repo")
     @patch("pathlib.Path.exists")
     def test_setup_repository_network_error(self, mock_exists, mock_repo_class):
         """Test setup repository with network error."""
@@ -350,7 +350,7 @@ class TestGitManager:
         mock_repo.head.commit = mock_commit
         self.git_manager.repo = mock_repo
 
-        with patch("src.services.git_manager.datetime") as mock_datetime:
+        with patch("src.models.git_manager.datetime") as mock_datetime:
             mock_datetime.fromtimestamp.return_value.isoformat.return_value = (
                 "2022-01-01T00:00:00"
             )

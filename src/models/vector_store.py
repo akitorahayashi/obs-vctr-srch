@@ -5,31 +5,10 @@ from typing import Dict, List, Optional
 
 import chromadb
 from chromadb.config import Settings
-from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
-from ..models import FileChange
+from ..schemas import FileChange, SearchResult
 from .obsidian_processor import ObsidianDocument
-
-
-class SearchRequest(BaseModel):
-    query: str
-    n_results: int = 10
-    file_filter: Optional[str] = None
-    tag_filter: Optional[List[str]] = None
-
-
-class SearchResult(BaseModel):
-    id: str
-    content: str
-    distance: float
-    file_path: str
-    title: str
-    chunk_index: int
-    tags: List[str]
-    links: List[str]
-    created_at: Optional[str]
-    modified_at: Optional[str]
 
 
 class VectorStore:

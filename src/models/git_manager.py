@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from git import Repo
 
-from ..models import FileChange
+from ..schemas import FileChange
 
 
 class GitManager:

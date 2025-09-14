@@ -1,8 +1,8 @@
 """Factory for creating GitManager instances with DEBUG mode support."""
 
 from ..config.settings import Settings
+from ..models import GitManager
 from ..protocols.git_manager_protocol import GitManagerProtocol
-from .git_manager import GitManager
 
 
 def create_git_manager(

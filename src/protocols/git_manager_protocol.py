@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Protocol, runtime_checkable
 
 # Import the existing FileChange model
-from ..models import FileChange
+from ..schemas import FileChange
 
 
 @runtime_checkable

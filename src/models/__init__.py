@@ -1,5 +1,7 @@
-"""Model classes for the application."""
+"""Models for the application."""
 
-from .git_models import FileChange
+from .git_manager import GitManager
+from .obsidian_processor import ObsidianProcessor
+from .vector_store import VectorStore
 
-__all__ = ["FileChange"]
+__all__ = ["GitManager", "ObsidianProcessor", "VectorStore"]

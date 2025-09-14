@@ -3,9 +3,8 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ..models import ObsidianProcessor, VectorStore
 from ..protocols.git_manager_protocol import GitManagerProtocol
-from .obsidian_processor import ObsidianProcessor
-from .vector_store import VectorStore
 
 
 class SyncCoordinator:

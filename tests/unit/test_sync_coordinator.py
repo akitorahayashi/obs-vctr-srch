@@ -2,9 +2,9 @@
 
 from unittest.mock import Mock, patch
 
-from src.models import FileChange
-from src.services.obsidian_processor import ObsidianDocument
-from src.services.sync_coordinator import SyncCoordinator
+from src.models.obsidian_processor import ObsidianDocument
+from src.schemas import FileChange
+from src.services import SyncCoordinator
 
 
 class TestSyncCoordinator:

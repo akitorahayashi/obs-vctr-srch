@@ -7,8 +7,8 @@ from fastapi import Depends, FastAPI
 from src.apps.api import router
 from src.apps.api.router import get_git_manager as router_get_git_manager
 from src.config.settings import Settings, get_settings
+from src.models import GitManager
 from src.protocols.git_manager_protocol import GitManagerProtocol
-from src.services.git_manager import GitManager
 
 settings = get_settings()
 

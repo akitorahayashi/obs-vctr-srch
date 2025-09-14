@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import Settings, get_settings
+from src.models import VectorStore
 from src.protocols.git_manager_protocol import GitManagerProtocol
-from src.services.sync_coordinator import SyncCoordinator
-from src.services.vector_store import SearchRequest, VectorStore
+from src.schemas import SearchRequest
+from src.services import SyncCoordinator
 
 router = APIRouter(prefix="/obs-vctr-srch", tags=["obs-vctr-srch"])
 
@@ -21,7 +22,7 @@ _sync_coordinator: Optional[SyncCoordinator] = None
 def get_git_manager() -> GitManagerProtocol:
     """Default GitManager provider - will be overridden via dependency_overrides in main.py"""
     from src.config.settings import get_settings
-    from src.services.git_manager import GitManager
+    from src.models import GitManager
 
     settings = get_settings()
     print("🌐 Default: Using real GitManager")
@@ -208,7 +209,7 @@ async def build_index_stream(
                     return
 
             # Reinitialize vector store
-            from src.services.vector_store import VectorStore
+            from src.models import VectorStore
 
             coordinator.vector_store = VectorStore(
                 persist_directory=str(db_path), model_name=settings.EMBEDDING_MODEL_NAME

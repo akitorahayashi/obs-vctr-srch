@@ -3,7 +3,8 @@
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from src.services.obsidian_processor import ObsidianDocument, ObsidianProcessor
+from src.models import ObsidianProcessor
+from src.models.obsidian_processor import ObsidianDocument
 
 
 class TestObsidianProcessor:
