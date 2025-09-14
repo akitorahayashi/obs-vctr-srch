@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..protocols.git_manager_protocol import GitManagerProtocol
-from .git_manager_factory import create_git_manager
 from .obsidian_processor import ObsidianProcessor
 from .vector_store import VectorStore
 
@@ -14,18 +13,13 @@ class SyncCoordinator:
 
     def __init__(
         self,
-        repo_url: str,
+        git_manager: GitManagerProtocol,
         local_path: str,
         vector_store_path: str = "./chroma_db",
-        branch: str = "main",
-        github_token: str = "",
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         processing_path: str = None,
-        debug_mode: bool = False,
     ):
-        self.git_manager: GitManagerProtocol = create_git_manager(
-            repo_url, local_path, branch, github_token, debug_mode
-        )
+        self.git_manager = git_manager
         self.processor = ObsidianProcessor()
         self.vector_store = VectorStore(
             persist_directory=vector_store_path, model_name=embedding_model

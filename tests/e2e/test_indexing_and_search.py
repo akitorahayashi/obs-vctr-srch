@@ -73,7 +73,10 @@ class TestIndexingAndSearch:
                 assert "content" in result
                 assert "distance" in result
                 # Additional fields that may be present
-                assert any(field in result for field in ["metadata", "chunk_index", "file_path"])
+                assert any(
+                    field in result
+                    for field in ["metadata", "chunk_index", "file_path"]
+                )
 
     def test_search_parameters(self):
         """Test search with different parameters."""

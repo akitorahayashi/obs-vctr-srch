@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import Settings, get_settings
+from src.protocols.git_manager_protocol import GitManagerProtocol
 from src.services.sync_coordinator import SyncCoordinator
 from src.services.vector_store import SearchRequest, VectorStore
 
@@ -16,19 +17,35 @@ router = APIRouter(prefix="/obs-vctr-srch", tags=["obs-vctr-srch"])
 _sync_coordinator: Optional[SyncCoordinator] = None
 
 
-def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoordinator:
+# GitManager dependency function (will be overridden by main.py)
+def get_git_manager() -> GitManagerProtocol:
+    """Default GitManager provider - will be overridden via dependency_overrides in main.py"""
+    from src.config.settings import get_settings
+    from src.services.git_manager import GitManager
+
+    settings = get_settings()
+    print("🌐 Default: Using real GitManager")
+    return GitManager(
+        repo_url=settings.OBSIDIAN_REPO_URL,
+        local_path=settings.OBSIDIAN_LOCAL_PATH,
+        branch=settings.OBSIDIAN_BRANCH,
+        github_token=settings.OBS_VAULT_TOKEN,
+    )
+
+
+def get_sync_coordinator(
+    settings: Settings = Depends(get_settings),
+    git_manager: GitManagerProtocol = Depends(get_git_manager),
+) -> SyncCoordinator:
     """Get or create sync coordinator instance."""
     global _sync_coordinator
     if _sync_coordinator is None:
         try:
             _sync_coordinator = SyncCoordinator(
-                repo_url=settings.OBSIDIAN_REPO_URL,
+                git_manager=git_manager,
                 local_path=settings.OBSIDIAN_LOCAL_PATH,
                 vector_store_path=settings.VECTOR_DB_PATH,
-                branch=settings.OBSIDIAN_BRANCH,
-                github_token=settings.OBS_VAULT_TOKEN,
                 embedding_model=settings.EMBEDDING_MODEL_NAME,
-                debug_mode=settings.DEBUG,
             )
         except Exception as e:
             raise HTTPException(
@@ -100,24 +117,26 @@ async def reindex_file(file_path: str):
 
 
 @router.post("/build-index", response_model=Dict[str, Any])
-async def build_index(settings: Settings = Depends(get_settings)):
+async def build_index(
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+    settings: Settings = Depends(get_settings),
+):
     """Build or rebuild the entire vector index by cloning if needed and performing full sync."""
 
     def _build_index_sync():
-        sc = get_sync_coordinator(settings)
         # If repository not set up yet, perform initial setup (clone + full sync)
-        if getattr(sc.git_manager, "repo", None) is None:
-            result = sc.initial_setup()
+        if getattr(coordinator.git_manager, "repo", None) is None:
+            result = coordinator.initial_setup()
             return {"status": "build-index complete", "result": result}
         # Repository exists: update repository, clear existing index and rebuild
         # First update repository to latest (including submodules)
-        if not sc.git_manager.pull_changes():
+        if not coordinator.git_manager.pull_changes():
             raise HTTPException(status_code=500, detail="Failed to update repository")
 
         import shutil
         from pathlib import Path
 
-        db_path = sc.vector_store.persist_directory
+        db_path = coordinator.vector_store.persist_directory
         if Path(db_path).exists():
             try:
                 shutil.rmtree(db_path)
@@ -126,11 +145,11 @@ async def build_index(settings: Settings = Depends(get_settings)):
                     status_code=500, detail=f"Failed to clear existing index: {str(e)}"
                 )
         # Reinitialize vector store for fresh indexing
-        sc.vector_store = VectorStore(
+        coordinator.vector_store = VectorStore(
             persist_directory=str(db_path), model_name=settings.EMBEDDING_MODEL_NAME
         )
         # Perform full synchronization
-        result = sc.full_sync()
+        result = coordinator.full_sync()
         return {"status": "build-index complete", "result": result}
 
     try:
@@ -150,26 +169,27 @@ async def build_index(settings: Settings = Depends(get_settings)):
 
 
 @router.post("/build-index-stream")
-async def build_index_stream(settings: Settings = Depends(get_settings)):
+async def build_index_stream(
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+    settings: Settings = Depends(get_settings),
+):
     """Build or rebuild the entire vector index with streaming progress updates."""
 
     async def generate_progress():
         try:
-            sc = get_sync_coordinator(settings)
-
             # Initial status
             yield f"data: {json.dumps({'type': 'status', 'message': 'Starting build index process...', 'progress': 0})}\n\n"
 
             # Setup repository if needed
-            if getattr(sc.git_manager, "repo", None) is None:
+            if getattr(coordinator.git_manager, "repo", None) is None:
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Setting up repository...', 'progress': 5})}\n\n"
-                if not sc.git_manager.setup_repository():
+                if not coordinator.git_manager.setup_repository():
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to setup repository'})}\n\n"
                     return
             else:
                 # Update repository
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Updating repository...', 'progress': 5})}\n\n"
-                if not sc.git_manager.pull_changes():
+                if not coordinator.git_manager.pull_changes():
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to update repository'})}\n\n"
                     return
 
@@ -179,7 +199,7 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
             import shutil
             from pathlib import Path
 
-            db_path = sc.vector_store.persist_directory
+            db_path = coordinator.vector_store.persist_directory
             if Path(db_path).exists():
                 try:
                     shutil.rmtree(db_path)
@@ -190,13 +210,13 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
             # Reinitialize vector store
             from src.services.vector_store import VectorStore
 
-            sc.vector_store = VectorStore(
+            coordinator.vector_store = VectorStore(
                 persist_directory=str(db_path), model_name=settings.EMBEDDING_MODEL_NAME
             )
 
             # Get all files to process
             yield f"data: {json.dumps({'type': 'status', 'message': 'Scanning markdown files...', 'progress': 15})}\n\n"
-            md_files = sc.git_manager.get_all_markdown_files()
+            md_files = coordinator.git_manager.get_all_markdown_files()
 
             if not md_files:
                 yield f"data: {json.dumps({'type': 'complete', 'message': 'No markdown files found', 'stats': {'processed': 0, 'failed': 0}})}\n\n"
@@ -229,24 +249,24 @@ async def build_index_stream(settings: Settings = Depends(get_settings)):
                     yield f"data: {json.dumps({'type': 'progress', 'message': f'Processing: {file_path}', 'progress': progress, 'current_file': i + 1, 'total_files': total_files, 'eta': eta_str})}\n\n"
 
                     # Get file content
-                    content = sc.git_manager.get_file_content(file_path)
+                    content = coordinator.git_manager.get_file_content(file_path)
                     if not content:
                         stats["failed"] += 1
                         yield f"data: {json.dumps({'type': 'warning', 'message': f'No content found for: {file_path}'})}\n\n"
                         continue
 
                     # Process the file
-                    document = sc.processor.process_file(file_path, content)
+                    document = coordinator.processor.process_file(file_path, content)
                     if not document:
                         stats["failed"] += 1
                         yield f"data: {json.dumps({'type': 'warning', 'message': f'Failed to process: {file_path}'})}\n\n"
                         continue
 
                     # Split into chunks for embedding
-                    chunks = sc.processor.split_content_for_embedding(document)
+                    chunks = coordinator.processor.split_content_for_embedding(document)
 
                     # Add to vector store
-                    if sc.vector_store.add_document(document, chunks):
+                    if coordinator.vector_store.add_document(document, chunks):
                         stats["processed"] += 1
                         stats["total_chunks"] += len(chunks)
                         yield f"data: {json.dumps({'type': 'file_complete', 'message': f'✅ Processed: {file_path} ({len(chunks)} chunks)', 'file_path': file_path, 'chunks': len(chunks)})}\n\n"

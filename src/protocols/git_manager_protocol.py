@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Protocol, runtime_checkable
 
 # Import the existing FileChange model
-from ..services.git_manager import FileChange
+from ..models import FileChange
 
 
 @runtime_checkable

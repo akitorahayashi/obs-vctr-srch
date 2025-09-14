@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from src.services.git_manager import FileChange
+from src.models import FileChange
 from src.services.obsidian_processor import ObsidianDocument
 from src.services.vector_store import VectorStore
 

@@ -8,7 +8,7 @@ from chromadb.config import Settings
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
-from .git_manager import FileChange
+from ..models import FileChange
 from .obsidian_processor import ObsidianDocument
 
 

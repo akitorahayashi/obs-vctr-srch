@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.services.git_manager import FileChange
+from src.models import FileChange
 
 
 class MockGitManager:

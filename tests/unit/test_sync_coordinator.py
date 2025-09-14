@@ -1,8 +1,8 @@
 """Unit tests for SyncCoordinator class."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from src.services.git_manager import FileChange
+from src.models import FileChange
 from src.services.obsidian_processor import ObsidianDocument
 from src.services.sync_coordinator import SyncCoordinator
 
@@ -18,28 +18,30 @@ class TestSyncCoordinator:
         self.branch = "main"
         self.github_token = "test_token"
 
+        # Create mock git_manager
+        self.mock_git_manager = Mock()
+        self.mock_git_manager.repo_url = self.repo_url
+
         with (
-            patch("src.services.sync_coordinator.create_git_manager"),
             patch("src.services.sync_coordinator.ObsidianProcessor"),
             patch("src.services.sync_coordinator.VectorStore"),
         ):
 
             self.coordinator = SyncCoordinator(
-                self.repo_url,
-                self.local_path,
-                self.vector_store_path,
-                self.branch,
-                self.github_token,
+                git_manager=self.mock_git_manager,
+                local_path=self.local_path,
+                vector_store_path=self.vector_store_path,
             )
 
     def test_init(self):
         """Test SyncCoordinator initialization."""
         assert str(self.coordinator.local_path) == self.local_path
+        assert self.mock_git_manager == self.mock_git_manager
 
     @patch("builtins.print")
     def test_initial_setup_success(self, mock_print):
         """Test successful initial setup."""
-        self.coordinator.git_manager.setup_repository.return_value = True
+        self.mock_git_manager.setup_repository.return_value = True
 
         # Mock full_sync
         expected_result = {
@@ -52,13 +54,13 @@ class TestSyncCoordinator:
             result = self.coordinator.initial_setup()
 
         assert result == expected_result
-        self.coordinator.git_manager.setup_repository.assert_called_once()
+        self.mock_git_manager.setup_repository.assert_called_once()
         mock_print.assert_called_with("Starting initial setup...")
 
     @patch("builtins.print")
     def test_initial_setup_repo_failure(self, mock_print):
         """Test initial setup when repository setup fails."""
-        self.coordinator.git_manager.setup_repository.return_value = False
+        self.mock_git_manager.setup_repository.return_value = False
 
         result = self.coordinator.initial_setup()
 
@@ -70,14 +72,14 @@ class TestSyncCoordinator:
     def test_initial_setup_repo_auth_failure(self, mock_print):
         """Test initial setup when repository authentication fails."""
         # Simulate authentication failure during setup
-        self.coordinator.git_manager.setup_repository.return_value = False
+        self.mock_git_manager.setup_repository.return_value = False
 
         result = self.coordinator.initial_setup()
 
         # Should return failure and not proceed to full_sync
         expected = {"success": False, "error": "Failed to setup repository"}
         assert result == expected
-        self.coordinator.git_manager.setup_repository.assert_called_once()
+        self.mock_git_manager.setup_repository.assert_called_once()
         # Verify full_sync is not called when repo setup fails
         with patch.object(self.coordinator, "full_sync") as mock_full_sync:
             self.coordinator.initial_setup()
@@ -86,7 +88,7 @@ class TestSyncCoordinator:
     @patch("builtins.print")
     def test_full_sync_no_files(self, mock_print):
         """Test full sync when no markdown files exist."""
-        self.coordinator.git_manager.get_all_markdown_files.return_value = []
+        self.mock_git_manager.get_all_markdown_files.return_value = []
 
         result = self.coordinator.full_sync()
 
@@ -102,12 +104,12 @@ class TestSyncCoordinator:
     def test_full_sync_success(self, mock_print):
         """Test successful full synchronization."""
         # Mock git manager
-        self.coordinator.git_manager.get_all_markdown_files.return_value = [
+        self.mock_git_manager.get_all_markdown_files.return_value = [
             "doc1.md",
             "doc2.md",
             "doc3.md",
         ]
-        self.coordinator.git_manager.get_file_content.side_effect = [
+        self.mock_git_manager.get_file_content.side_effect = [
             "Content 1",
             "Content 2",
             None,  # Third file fails to read
@@ -154,7 +156,7 @@ class TestSyncCoordinator:
     @patch("builtins.print")
     def test_full_sync_exception(self, mock_print):
         """Test full sync with exception."""
-        self.coordinator.git_manager.get_all_markdown_files.side_effect = Exception(
+        self.mock_git_manager.get_all_markdown_files.side_effect = Exception(
             "Git error"
         )
 
@@ -166,7 +168,7 @@ class TestSyncCoordinator:
     @patch("builtins.print")
     def test_incremental_sync_no_changes(self, mock_print):
         """Test incremental sync when no changes exist."""
-        self.coordinator.git_manager.get_changed_files.return_value = []
+        self.mock_git_manager.get_changed_files.return_value = []
 
         result = self.coordinator.incremental_sync()
 
@@ -187,8 +189,8 @@ class TestSyncCoordinator:
             FileChange(file_path="doc2.md", change_type="A"),
             FileChange(file_path="doc3.md", change_type="D"),
         ]
-        self.coordinator.git_manager.get_changed_files.return_value = changes
-        self.coordinator.git_manager.pull_changes.return_value = True
+        self.mock_git_manager.get_changed_files.return_value = changes
+        self.mock_git_manager.pull_changes.return_value = True
 
         # Mock vector store change processing
         self.coordinator.vector_store.process_file_changes.return_value = {
@@ -197,7 +199,7 @@ class TestSyncCoordinator:
         }
 
         # Mock file processing
-        self.coordinator.git_manager.get_file_content.side_effect = [
+        self.mock_git_manager.get_file_content.side_effect = [
             "Content 1",
             "Content 2",
         ]
@@ -239,8 +241,8 @@ class TestSyncCoordinator:
     def test_incremental_sync_pull_failure(self, mock_print):
         """Test incremental sync when git pull fails."""
         changes = [FileChange(file_path="doc1.md", change_type="M")]
-        self.coordinator.git_manager.get_changed_files.return_value = changes
-        self.coordinator.git_manager.pull_changes.return_value = False
+        self.mock_git_manager.get_changed_files.return_value = changes
+        self.mock_git_manager.pull_changes.return_value = False
         self.coordinator.vector_store.process_file_changes.return_value = {}
 
         result = self.coordinator.incremental_sync()
@@ -251,9 +253,7 @@ class TestSyncCoordinator:
     @patch("builtins.print")
     def test_incremental_sync_exception(self, mock_print):
         """Test incremental sync with exception."""
-        self.coordinator.git_manager.get_changed_files.side_effect = Exception(
-            "Sync error"
-        )
+        self.mock_git_manager.get_changed_files.side_effect = Exception("Sync error")
 
         result = self.coordinator.incremental_sync()
 
@@ -280,12 +280,12 @@ class TestSyncCoordinator:
     def test_get_repository_status_success(self):
         """Test getting repository status successfully."""
         # Mock git manager
-        self.coordinator.git_manager.get_last_sync_info.return_value = {
+        self.mock_git_manager.get_last_sync_info.return_value = {
             "commit_hash": "abc123",
             "commit_date": "2023-01-01T10:00:00",
             "commit_message": "Latest commit",
         }
-        self.coordinator.git_manager.get_all_markdown_files.return_value = [
+        self.mock_git_manager.get_all_markdown_files.return_value = [
             "doc1.md",
             "doc2.md",
         ]
@@ -298,16 +298,14 @@ class TestSyncCoordinator:
 
         result = self.coordinator.get_repository_status()
 
-        assert result["repository"]["url"] == self.coordinator.git_manager.repo_url
+        assert result["repository"]["url"] == self.mock_git_manager.repo_url
         assert result["repository"]["total_md_files"] == 2
         assert result["vector_store"]["total_documents"] == 2
         assert result["sync_status"] == "ready"
 
     def test_get_repository_status_exception(self):
         """Test getting repository status with exception."""
-        self.coordinator.git_manager.get_last_sync_info.side_effect = Exception(
-            "Status error"
-        )
+        self.mock_git_manager.get_last_sync_info.side_effect = Exception("Status error")
 
         result = self.coordinator.get_repository_status()
 
@@ -320,7 +318,7 @@ class TestSyncCoordinator:
             "doc1.md",
             "doc2.md",
         ]
-        self.coordinator.git_manager.get_all_markdown_files.return_value = [
+        self.mock_git_manager.get_all_markdown_files.return_value = [
             "doc1.md",
             "doc2.md",
         ]
@@ -337,7 +335,7 @@ class TestSyncCoordinator:
             "doc2.md",
             "orphan.md",
         ]
-        self.coordinator.git_manager.get_all_markdown_files.return_value = [
+        self.mock_git_manager.get_all_markdown_files.return_value = [
             "doc1.md",
             "doc2.md",
         ]
@@ -368,7 +366,7 @@ class TestSyncCoordinator:
         file_path = "test.md"
         content = "Test content"
 
-        self.coordinator.git_manager.get_file_content.return_value = content
+        self.mock_git_manager.get_file_content.return_value = content
 
         mock_doc = ObsidianDocument(
             file_path=file_path,
@@ -394,7 +392,7 @@ class TestSyncCoordinator:
     def test_force_reindex_file_not_found(self):
         """Test re-indexing when file is not found."""
         file_path = "nonexistent.md"
-        self.coordinator.git_manager.get_file_content.return_value = None
+        self.mock_git_manager.get_file_content.return_value = None
 
         result = self.coordinator.force_reindex_file(file_path)
 
@@ -404,7 +402,7 @@ class TestSyncCoordinator:
     def test_force_reindex_file_process_failure(self):
         """Test re-indexing when file processing fails."""
         file_path = "test.md"
-        self.coordinator.git_manager.get_file_content.return_value = "content"
+        self.mock_git_manager.get_file_content.return_value = "content"
         self.coordinator.processor.process_file.return_value = None
 
         result = self.coordinator.force_reindex_file(file_path)
@@ -417,7 +415,7 @@ class TestSyncCoordinator:
         file_path = "test.md"
         content = "Test content"
 
-        self.coordinator.git_manager.get_file_content.return_value = content
+        self.mock_git_manager.get_file_content.return_value = content
 
         mock_doc = ObsidianDocument(
             file_path=file_path,
@@ -441,9 +439,7 @@ class TestSyncCoordinator:
     def test_force_reindex_file_exception(self):
         """Test re-indexing with exception."""
         file_path = "test.md"
-        self.coordinator.git_manager.get_file_content.side_effect = Exception(
-            "Reindex error"
-        )
+        self.mock_git_manager.get_file_content.side_effect = Exception("Reindex error")
 
         result = self.coordinator.force_reindex_file(file_path)
 

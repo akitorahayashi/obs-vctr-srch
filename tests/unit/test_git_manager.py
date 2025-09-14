@@ -6,7 +6,8 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.services.git_manager import FileChange, GitManager
+from src.models import FileChange
+from src.services.git_manager import GitManager
 
 
 class TestGitManager:
