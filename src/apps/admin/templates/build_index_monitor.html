@@ -252,8 +252,8 @@
                 if (data.total_time_seconds) {
                     document.getElementById('totalTime').textContent = formatTime(data.total_time_seconds);
                 }
-                stopOperation();
                 const operationName = currentOperation === 'sync' ? 'Sync' : 'Rebuild';
+                stopOperation();
                 addLog(`🎊 ${operationName} completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
                 break;
 
@@ -322,7 +322,7 @@
 
     // Update total time periodically when running
     setInterval(() => {
-        if (startTime && eventSource && eventSource.readyState === EventSource.OPEN) {
+        if (startTime && currentOperation) {
             const elapsed = (new Date() - startTime) / 1000;
             document.getElementById('totalTime').textContent = formatTime(elapsed);
         }

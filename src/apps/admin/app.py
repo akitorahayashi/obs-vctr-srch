@@ -33,15 +33,15 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Internal API URL (Docker internal communication)
 INTERNAL_API_URL = os.getenv("INTERNAL_API_URL", "http://api:8000")
-# External API URL (Browser to API communication)
-EXTERNAL_API_URL = os.getenv("EXTERNAL_API_URL", "http://127.0.0.1:8005")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Main admin dashboard."""
     return templates.TemplateResponse(
-        "dashboard.html", {"request": request, "api_base_url": INTERNAL_API_URL}
+        request,
+        "dashboard.html",
+        {"request": request, "api_base_url": INTERNAL_API_URL},
     )
 
 
@@ -49,6 +49,7 @@ async def dashboard(request: Request):
 async def build_index_monitor(request: Request):
     """Build index monitoring page."""
     return templates.TemplateResponse(
+        request,
         "build_index_monitor.html",
         {
             "request": request,
@@ -106,7 +107,9 @@ async def get_repository_status():
 
 @app.post("/api/sync")
 async def sync_stream(
-    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+    coordinator: SyncCoordinator = Depends(
+        get_sync_coordinator
+    ),  # noqa: B008 (FastAPI DI)
 ):
     """Stream incremental sync progress."""
 
@@ -127,7 +130,9 @@ async def sync_stream(
 
 @app.post("/api/build-index")
 async def build_index_stream(
-    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+    coordinator: SyncCoordinator = Depends(
+        get_sync_coordinator
+    ),  # noqa: B008 (FastAPI DI)
 ):
     """Stream full rebuild progress."""
 

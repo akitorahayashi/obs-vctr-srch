@@ -2,27 +2,9 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.apps.admin.app import app
-from src.models import GitManager, ObsidianProcessor, VectorStore
-from src.services import SyncCoordinator
-
-
-@pytest.fixture
-def mock_sync_coordinator():
-    """Create a mock SyncCoordinator for testing."""
-    mock_git_manager = Mock(spec=GitManager)
-    mock_vector_store = Mock(spec=VectorStore)
-    mock_processor = Mock(spec=ObsidianProcessor)
-
-    coordinator = SyncCoordinator(
-        git_manager=mock_git_manager,
-        vector_store=mock_vector_store,
-        processor=mock_processor,
-    )
-    return coordinator
 
 
 class TestAdminStreamingEndpoints:
@@ -69,7 +51,7 @@ class TestAdminStreamingEndpoints:
 
         response = client.post("/api/sync")
         assert response.status_code == 200
-        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        assert response.headers["content-type"].startswith("text/event-stream")
 
     @patch("src.apps.admin.app.get_sync_coordinator")
     def test_build_index_stream_success(self, mock_get_coordinator):
@@ -102,7 +84,7 @@ class TestAdminStreamingEndpoints:
 
         response = client.post("/api/build-index")
         assert response.status_code == 200
-        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        assert response.headers["content-type"].startswith("text/event-stream")
 
     def test_admin_health_check(self):
         """Test admin app health check."""

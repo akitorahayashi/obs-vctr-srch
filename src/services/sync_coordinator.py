@@ -1,7 +1,8 @@
 """Coordinates synchronization between Git repository and vector store."""
 
+import asyncio
 import time
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from src.models import GitManager, ObsidianProcessor, VectorStore
 from src.schemas import FileStatus
@@ -20,7 +21,7 @@ class SyncCoordinator:
         self.vector_store = vector_store
         self.processor = processor
 
-    async def rebuild_index_stream(self) -> AsyncGenerator[Dict[str, any], None]:
+    async def rebuild_index_stream(self) -> AsyncGenerator[Dict[str, Any], None]:
         """Rebuild the entire vector index with streaming progress updates."""
         try:
             yield {
@@ -53,7 +54,7 @@ class SyncCoordinator:
                 "message": "Clearing existing index...",
                 "progress": 10,
             }
-            clear_result = self.vector_store.clear_collection()
+            clear_result = await asyncio.to_thread(self.vector_store.clear_collection)
             if not clear_result["success"]:
                 yield {
                     "type": "error",
@@ -66,7 +67,7 @@ class SyncCoordinator:
                 "message": "Scanning markdown files...",
                 "progress": 15,
             }
-            md_files = self.git_manager.get_all_markdown_files()
+            md_files = await asyncio.to_thread(self.git_manager.get_all_markdown_files)
 
             if not md_files:
                 yield {
@@ -108,8 +109,10 @@ class SyncCoordinator:
                 }
 
                 try:
-                    content = self.git_manager.get_file_content(file_path)
-                    if not content:
+                    content = await asyncio.to_thread(
+                        self.git_manager.get_file_content, file_path
+                    )
+                    if content is None:
                         stats["failed"] += 1
                         yield {
                             "type": "warning",
@@ -117,7 +120,9 @@ class SyncCoordinator:
                         }
                         continue
 
-                    document = self.processor.process_file(file_path, content)
+                    document = await asyncio.to_thread(
+                        self.processor.process_file, file_path, content
+                    )
                     if not document:
                         stats["failed"] += 1
                         yield {
@@ -126,8 +131,13 @@ class SyncCoordinator:
                         }
                         continue
 
-                    chunks = self.processor.split_content_for_embedding(document)
-                    if self.vector_store.add_document(document, chunks):
+                    chunks = await asyncio.to_thread(
+                        self.processor.split_content_for_embedding, document
+                    )
+                    ok = await asyncio.to_thread(
+                        self.vector_store.add_document, document, chunks
+                    )
+                    if ok:
                         stats["processed"] += 1
                         stats["total_chunks"] += len(chunks)
                         yield {
@@ -162,10 +172,10 @@ class SyncCoordinator:
             }
             yield result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - stream safety
             yield {"type": "error", "message": f"Build index failed: {str(e)}"}
 
-    async def incremental_sync_stream(self) -> AsyncGenerator[Dict[str, any], None]:
+    async def incremental_sync_stream(self) -> AsyncGenerator[Dict[str, Any], None]:
         """Perform incremental synchronization with streaming progress updates."""
         try:
             yield {
@@ -273,8 +283,10 @@ class SyncCoordinator:
 
                 try:
                     # Get file content
-                    content = self.git_manager.get_file_content(change.file_path)
-                    if not content:
+                    content = await asyncio.to_thread(
+                        self.git_manager.get_file_content, change.file_path
+                    )
+                    if content is None:
                         stats["failed"] += 1
                         yield {
                             "type": "warning",
@@ -283,7 +295,9 @@ class SyncCoordinator:
                         continue
 
                     # Process the file
-                    document = self.processor.process_file(change.file_path, content)
+                    document = await asyncio.to_thread(
+                        self.processor.process_file, change.file_path, content
+                    )
                     if not document:
                         stats["failed"] += 1
                         yield {
@@ -293,10 +307,15 @@ class SyncCoordinator:
                         continue
 
                     # Split into chunks for embedding
-                    chunks = self.processor.split_content_for_embedding(document)
+                    chunks = await asyncio.to_thread(
+                        self.processor.split_content_for_embedding, document
+                    )
 
                     # Add to vector store
-                    if self.vector_store.add_document(document, chunks):
+                    ok = await asyncio.to_thread(
+                        self.vector_store.add_document, document, chunks
+                    )
+                    if ok:
                         stats["processed"] += 1
                         stats["total_chunks"] += len(chunks)
                         yield {
@@ -332,7 +351,7 @@ class SyncCoordinator:
             }
             yield result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - stream safety
             yield {"type": "error", "message": f"Incremental sync failed: {str(e)}"}
 
     def search_documents(
@@ -350,23 +369,25 @@ class SyncCoordinator:
             tag_filter=tag_filter,
         )
 
-    def get_repository_status(self) -> Dict[str, any]:
+    async def get_repository_status(self) -> Dict[str, Any]:
         """Get current repository and vector store status."""
         try:
             # Git status
-            sync_info = self.git_manager.get_last_sync_info()
+            sync_info = await asyncio.to_thread(self.git_manager.get_last_sync_info)
 
             # Vector store stats
-            vector_stats = self.vector_store.get_stats()
+            vector_stats = await asyncio.to_thread(self.vector_store.get_stats)
 
             # Repository info
-            repo_files = len(self.git_manager.get_all_markdown_files())
+            repo_files = await asyncio.to_thread(
+                self.git_manager.get_all_markdown_files
+            )
 
             repository_info = {
                 "url": self.git_manager.repo_url,
                 "local_path": str(self.git_manager.local_path),
                 "branch": self.git_manager.branch,
-                "total_md_files": repo_files,
+                "total_md_files": len(repo_files),
                 "status": "available",
             }
 
@@ -389,14 +410,18 @@ class SyncCoordinator:
                 "error": str(e),
             }
 
-    def cleanup_orphaned_embeddings(self) -> Dict[str, int]:
+    async def cleanup_orphaned_embeddings(self) -> Dict[str, int]:
         """Remove embeddings for files that no longer exist in the repository."""
         try:
             # Get all files in vector store
-            stored_files = set(self.vector_store.list_all_documents())
+            stored_files = set(
+                await asyncio.to_thread(self.vector_store.list_all_documents)
+            )
 
             # Get all files in repository
-            repo_files = set(self.git_manager.get_all_markdown_files())
+            repo_files = set(
+                await asyncio.to_thread(self.git_manager.get_all_markdown_files)
+            )
 
             # Find orphaned files
             orphaned_files = stored_files - repo_files
@@ -407,7 +432,10 @@ class SyncCoordinator:
             # Remove orphaned embeddings
             removed_count = 0
             for file_path in orphaned_files:
-                if self.vector_store.remove_document(file_path):
+                removed = await asyncio.to_thread(
+                    self.vector_store.remove_document, file_path
+                )
+                if removed:
                     removed_count += 1
 
             return {

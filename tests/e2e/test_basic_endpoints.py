@@ -56,11 +56,11 @@ class TestBasicEndpoints:
     def test_admin_endpoints_removed_from_public_api(self, client: TestClient):
         """Test that admin endpoints have been properly removed from public API."""
         admin_endpoints = [
-            ("POST", "/api/obs-vctr-srch/sync"),
-            ("POST", "/api/obs-vctr-srch/build-index"),
+            "/api/obs-vctr-srch/sync",
+            "/api/obs-vctr-srch/build-index",
         ]
 
-        for method, endpoint in admin_endpoints:
+        for endpoint in admin_endpoints:
             response = client.post(endpoint)
             assert (
                 response.status_code == 404
