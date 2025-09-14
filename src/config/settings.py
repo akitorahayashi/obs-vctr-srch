@@ -16,11 +16,15 @@ class Settings(BaseSettings):
     OBSIDIAN_REPO_URL: str = "https://github.com/akitorahayashi/obs-vault.git"
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-mpnet-base-v2"
     OBS_VAULT_TOKEN: str = ""  # For private repositories
+    BUILD_INDEX_TIMEOUT: int = 600  # Timeout in seconds for build-index operation
 
     # Hardcoded paths and branch - these don't change
     OBSIDIAN_LOCAL_PATH: str = "./obs-vault"
     OBSIDIAN_BRANCH: str = "main"
     VECTOR_DB_PATH: str = "./chroma_db"
+
+    # Development and debugging
+    DEBUG: bool = False
 
 
 @lru_cache

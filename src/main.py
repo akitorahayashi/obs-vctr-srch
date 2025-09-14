@@ -8,7 +8,6 @@ app = FastAPI(
     description="A FastAPI application for searching Obsidian vault with vector embeddings",
 )
 
-# Include routers
 app.include_router(router.router, prefix="/api")
 
 

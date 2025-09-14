@@ -3,31 +3,19 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from git import Repo
-from pydantic import BaseModel
 
-
-class FileChange(BaseModel):
-    """Represents a file change detected by git diff."""
-
-    file_path: str
-    change_type: str  # 'A' (added), 'M' (modified), 'D' (deleted), 'R' (renamed)
-    old_file_path: Optional[str] = None  # For renamed files
+from src.config.settings import Settings
+from src.schemas import FileChange, FileStatus
 
 
 class GitManager:
     """Manages git repository operations for Obsidian vault."""
 
-    def __init__(
-        self,
-        repo_url: str,
-        local_path: str,
-        branch: str = "main",
-        github_token: str = "",
-    ):
-        self.repo_url = repo_url
-        self.local_path = Path(local_path)
-        self.branch = branch
-        self.github_token = github_token
+    def __init__(self, settings: Settings):
+        self.repo_url = settings.OBSIDIAN_REPO_URL
+        self.local_path = Path(settings.OBSIDIAN_LOCAL_PATH)
+        self.branch = settings.OBSIDIAN_BRANCH
+        self.github_token = settings.OBS_VAULT_TOKEN
         self.repo: Optional[Repo] = None
 
     def setup_repository(self) -> bool:
@@ -51,6 +39,14 @@ class GitManager:
                     # Pull latest changes
                     origin.pull()
                     print(f"Updated to latest changes on branch {self.branch}")
+
+                    # Update submodules to commits recorded in main repository
+                    if self.repo.submodules:
+                        print("Updating submodules...")
+                        for submodule in self.repo.submodules:
+                            submodule.update(recursive=True)
+                            print(f"Updated submodule: {submodule.name}")
+                        print("All submodules updated")
                 except Exception as e:
                     print(f"Warning: Failed to update existing repository: {e}")
 
@@ -76,6 +72,15 @@ class GitManager:
                     clone_url, self.local_path, branch=self.branch
                 )
                 print(f"Repository cloned to {self.local_path}")
+
+                # Initialize and update submodules
+                if self.repo.submodules:
+                    print("Initializing and updating submodules...")
+                    self.repo.git.submodule("update", "--init", "--recursive")
+                    for submodule in self.repo.submodules:
+                        print(f"Updated submodule: {submodule.name}")
+                    print("All submodules initialized")
+
                 return True
         except Exception as e:
             print(f"Failed to setup repository: {e}")
@@ -112,16 +117,26 @@ class GitManager:
 
             changes = []
             for item in diff_items:
-                change_type = item.change_type
+                change_type_map = {
+                    "A": FileStatus.ADDED,
+                    "M": FileStatus.MODIFIED,
+                    "D": FileStatus.DELETED,
+                    "R": FileStatus.RENAMED,
+                    "T": FileStatus.MODIFIED,  # Treat type changes as modifications
+                }
+                status = change_type_map.get(item.change_type)
+                if not status:
+                    continue  # Skip unsupported change types
+
                 file_path = item.a_path or item.b_path
-                old_file_path = item.a_path if item.renamed_file else None
+                old_file_path = item.a_path if item.renamed else None
 
                 # Only process .md files (Obsidian notes)
                 if file_path and file_path.endswith(".md"):
                     changes.append(
                         FileChange(
                             file_path=file_path,
-                            change_type=change_type,
+                            status=status,
                             old_file_path=old_file_path,
                         )
                     )
@@ -133,17 +148,25 @@ class GitManager:
             return []
 
     def pull_changes(self) -> bool:
-        """Pull latest changes from remote."""
+        """Pull latest changes from remote and update submodules."""
         if not self.repo:
             raise RuntimeError("Repository not initialized")
 
         try:
+            # Pull main repository changes
             origin = self.repo.remotes.origin
             origin.pull()
             print("Successfully pulled latest changes")
+
+            # Update submodules to commits recorded in main repository
+            for submodule in self.repo.submodules:
+                print(f"Updating submodule: {submodule.name}")
+                submodule.update(recursive=True)
+            print("Successfully updated all submodules")
+
             return True
         except Exception as e:
-            print(f"Failed to pull changes: {e}")
+            print(f"Failed to pull changes or update submodules: {e}")
             return False
 
     def get_file_content(self, file_path: str) -> Optional[str]:

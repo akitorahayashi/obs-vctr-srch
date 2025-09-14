@@ -143,17 +143,17 @@ test: unit-test intg-test build-test e2e-test ## Run the full test suite
 .PHONY: unit-test
 unit-test: ## Run the unit tests locally
 	@echo "Running unit tests..."
-	@pytest tests/unit -v -s
+	@.venv/bin/python -m pytest tests/unit -v -s
 
 .PHONY: intg-test
 intg-test: ## Run integration tests locally
 	@echo "Running integration tests..."
-	@pytest tests/intg -v -s
+	@.venv/bin/python -m pytest tests/intg -v -s
 
 .PHONY: e2e-test
 e2e-test: ## Run end-to-end tests against a live application stack
 	@echo "Running end-to-end tests..."
-	@pytest tests/e2e -v -s
+	@.venv/bin/python -m pytest tests/e2e -v -s
 
 .PHONY: build-test
 build-test: ## Build Docker image for testing without leaving artifacts

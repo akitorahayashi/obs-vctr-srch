@@ -65,12 +65,19 @@ This API provides endpoints for searching and maintaining a synchronized vector 
 
 ## Index Management
 - **POST /api/obs-vctr-srch/sync**
-  - **Description**: Performs an incremental synchronization. Scans for changes in the repository (based on Git history) and updates the index with new, modified, or deleted notes.
-  - **Query Parameters**:
-    - `full_sync` (optional, default: false): Perform full sync instead of incremental
+  - **Description**: Performs an incremental synchronization. Scans for changes in the Git repository (new, modified, or deleted notes) and updates the search index accordingly. This is the standard way to keep the index up-to-date with the vault.
+  - **Request Body**: None
   - **Response**: 
     ```json
-    {"status": "sync would happen", "full_sync": false}
+    {
+      "success": true,
+      "message": "Incremental sync complete",
+      "stats": {
+        "added": 1,
+        "updated": 2,
+        "deleted": 0
+      }
+    }
     ```
 
   - **POST /api/obs-vctr-srch/build-index**

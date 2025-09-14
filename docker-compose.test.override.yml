@@ -4,5 +4,20 @@ services:
       target: development
     ports: !override
       - "${HOST_BIND_IP}:${TEST_PORT}:8000"
-    volumes: []
+    volumes:
+      - "./src:/app/src"
+      - "./dev:/app/dev"
+    environment:
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - DEBUG=true
+
+  admin:
+    build:
+      target: development
+    ports: !override
+      - "${HOST_BIND_IP}:${ADMIN_TEST_PORT}:8010"
+    volumes:
+      - "./src:/app/src"
+    environment:
+      - EXTERNAL_API_URL=http://${HOST_BIND_IP}:${TEST_PORT}
 

@@ -1,87 +1,62 @@
-import os
-import time
-from typing import Generator
+from unittest.mock import Mock
 
-import httpx
 import pytest
-from dotenv import load_dotenv
-from testcontainers.compose import DockerCompose
+from fastapi.testclient import TestClient
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Set environment variables for Docker Compose
-os.environ["HOST_BIND_IP"] = os.getenv("HOST_BIND_IP", "127.0.0.1")
-os.environ["TEST_PORT"] = os.getenv("TEST_PORT", "8005")
+from src.dependencies import get_git_manager, get_vector_store
+from src.main import app
+from src.models import GitManager, VectorStore
+from src.schemas import FileChange, FileStatus, SearchResult
 
 
-@pytest.fixture(scope="session", autouse=True)
-def e2e_setup() -> Generator[None, None, None]:
+def get_mock_git_manager():
+    """Override for get_git_manager dependency."""
+    mock_gm = Mock(spec=GitManager)
+    mock_gm.get_changed_files.return_value = [
+        FileChange(status=FileStatus.ADDED, file_path="test.md")
+    ]
+    mock_gm.pull_changes.return_value = True
+    mock_gm.get_all_markdown_files.return_value = ["test.md"]
+    mock_gm.get_file_content.return_value = "# Test Document\n\nThis is a test."
+    mock_gm.setup_repository.return_value = True
+    return mock_gm
+
+
+def get_mock_vector_store():
+    """Override for get_vector_store dependency."""
+    mock_vs = Mock(spec=VectorStore)
+    mock_vs.search.return_value = [
+        SearchResult(
+            id="test.md#chunk_0",
+            content="This is a test.",
+            distance=0.1,
+            file_path="test.md",
+            title="Test Document",
+            chunk_index=0,
+            tags=[],
+            links=[],
+        )
+    ]
+    mock_vs.add_document.return_value = True
+    mock_vs.process_file_changes.return_value = {
+        "added": 0,
+        "updated": 0,
+        "deleted": 0,
+        "renamed": 0,
+    }
+    mock_vs.clear_collection.return_value = {"success": True}
+    return mock_vs
+
+
+@pytest.fixture(scope="module")
+def client() -> TestClient:
     """
-    Manages the lifecycle of the application for end-to-end testing using testcontainers.
+    Test client fixture with dependency overrides for E2E tests.
     """
-    host_bind_ip = os.getenv("HOST_BIND_IP", "127.0.0.1")
-    host_port = os.getenv("TEST_PORT", "8005")
-    health_url = f"http://{host_bind_ip}:{host_port}/health"
+    app.dependency_overrides[get_git_manager] = get_mock_git_manager
+    app.dependency_overrides[get_vector_store] = get_mock_vector_store
 
-    # Initialize Docker Compose with testcontainers
-    compose = DockerCompose(
-        ".",
-        compose_file_name=["docker-compose.yml", "docker-compose.test.override.yml"],
-    )
+    with TestClient(app) as test_client:
+        yield test_client
 
-    try:
-        # Start the containers
-        compose.start()
-
-        # Health Check
-        start_time = time.time()
-        timeout = 30  # 30 seconds for basic API health check
-        is_healthy = False
-        while time.time() - start_time < timeout:
-            try:
-                response = httpx.get(health_url, timeout=5)
-                if response.status_code == 200:
-                    print("✅ API is healthy!")
-                    # Also check if obs endpoints are available
-                    obs_health_url = (
-                        f"http://{host_bind_ip}:{host_port}/api/obs-vctr-srch/health"
-                    )
-                    try:
-                        obs_response = httpx.get(obs_health_url, timeout=5)
-                        print(
-                            f"🔍 /api/obs-vctr-srch/health response: {obs_response.status_code}"
-                        )
-                        if obs_response.status_code == 200:
-                            print("✅ Obs endpoints are ready!")
-                            is_healthy = True
-                            break
-                        else:
-                            print(
-                                f"⏳ Obs endpoints not ready yet, response: {obs_response.status_code}"
-                            )
-                            # Try to get more info about the error
-                            print(f"Response content: {obs_response.text}")
-                    except Exception as obs_e:
-                        print(f"❌ Error checking obs endpoint: {obs_e}")
-            except httpx.RequestError as e:
-                print(
-                    f"⏳ API not yet healthy, retrying... URL: {health_url}, Error: {e}"
-                )
-            time.sleep(3)
-
-        if not is_healthy:
-            print("\n🛑 Stopping E2E services due to health check failure...")
-            compose.stop()
-            pytest.fail(f"API did not become healthy within {timeout} seconds.")
-
-        yield
-
-    except Exception as e:
-        print(f"\n🛑 Failed to start services: {e}")
-        compose.stop()
-        raise
-    finally:
-        # Stop services
-        print("\n🛑 Stopping E2E services...")
-        compose.stop()
+    app.dependency_overrides = {}  # Clear overrides after tests

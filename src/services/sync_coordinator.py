@@ -1,11 +1,10 @@
 """Coordinates synchronization between Git repository and vector store."""
 
-from pathlib import Path
-from typing import Dict, List, Optional
+import time
+from typing import AsyncGenerator, Dict, List, Optional
 
-from .git_manager import GitManager
-from .obsidian_processor import ObsidianProcessor
-from .vector_store import VectorStore
+from src.models import GitManager, ObsidianProcessor, VectorStore
+from src.schemas import FileStatus
 
 
 class SyncCoordinator:
@@ -13,20 +12,13 @@ class SyncCoordinator:
 
     def __init__(
         self,
-        repo_url: str,
-        local_path: str,
-        vector_store_path: str = "./chroma_db",
-        branch: str = "main",
-        github_token: str = "",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        git_manager: GitManager,
+        vector_store: VectorStore,
+        processor: ObsidianProcessor,
     ):
-        self.git_manager = GitManager(repo_url, local_path, branch, github_token)
-        self.processor = ObsidianProcessor()
-        self.vector_store = VectorStore(
-            persist_directory=vector_store_path, model_name=embedding_model
-        )
-
-        self.local_path = Path(local_path)
+        self.git_manager = git_manager
+        self.vector_store = vector_store
+        self.processor = processor
 
     def initial_setup(self) -> Dict[str, any]:
         """Perform initial repository setup and full sync."""
@@ -44,7 +36,7 @@ class SyncCoordinator:
         print("Starting full synchronization...")
 
         try:
-            # Get all markdown files
+            # Get all markdown files from git manager (works with both real and mock)
             md_files = self.git_manager.get_all_markdown_files()
 
             if not md_files:
@@ -58,7 +50,7 @@ class SyncCoordinator:
 
             for file_path in md_files:
                 try:
-                    # Get file content
+                    # Get file content from git manager (works with both real and mock)
                     content = self.git_manager.get_file_content(file_path)
                     if not content:
                         stats["failed"] += 1
@@ -93,6 +85,151 @@ class SyncCoordinator:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def rebuild_index_stream(self) -> AsyncGenerator[Dict[str, any], None]:
+        """Rebuild the entire vector index with streaming progress updates."""
+        try:
+            yield {
+                "type": "status",
+                "message": "Starting build index process...",
+                "progress": 0,
+            }
+
+            if getattr(self.git_manager, "repo", None) is None:
+                yield {
+                    "type": "status",
+                    "message": "Setting up repository...",
+                    "progress": 5,
+                }
+                if not self.git_manager.setup_repository():
+                    yield {"type": "error", "message": "Failed to setup repository"}
+                    return
+            else:
+                yield {
+                    "type": "status",
+                    "message": "Updating repository...",
+                    "progress": 5,
+                }
+                if not self.git_manager.pull_changes():
+                    yield {"type": "error", "message": "Failed to update repository"}
+                    return
+
+            yield {
+                "type": "status",
+                "message": "Clearing existing index...",
+                "progress": 10,
+            }
+            clear_result = self.vector_store.clear_collection()
+            if not clear_result["success"]:
+                yield {
+                    "type": "error",
+                    "message": f"Failed to clear existing index: {clear_result['message']}",
+                }
+                return
+
+            yield {
+                "type": "status",
+                "message": "Scanning markdown files...",
+                "progress": 15,
+            }
+            md_files = self.git_manager.get_all_markdown_files()
+
+            if not md_files:
+                yield {
+                    "type": "complete",
+                    "message": "No markdown files found",
+                    "stats": {"processed": 0, "failed": 0},
+                }
+                return
+
+            total_files = len(md_files)
+            yield {
+                "type": "status",
+                "message": f"Found {total_files} files to process",
+                "progress": 20,
+                "total_files": total_files,
+            }
+
+            stats = {"processed": 0, "failed": 0, "total_chunks": 0}
+            start_time = time.time()
+
+            for i, file_path in enumerate(md_files):
+                progress = 20 + (i / total_files) * 70
+                if i > 0:
+                    elapsed = time.time() - start_time
+                    avg_time_per_file = elapsed / i
+                    remaining_files = total_files - i
+                    eta_seconds = remaining_files * avg_time_per_file
+                    eta_str = f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                else:
+                    eta_str = "calculating..."
+
+                yield {
+                    "type": "progress",
+                    "message": f"Processing: {file_path}",
+                    "progress": progress,
+                    "current_file": i + 1,
+                    "total_files": total_files,
+                    "eta": eta_str,
+                }
+
+                try:
+                    content = self.git_manager.get_file_content(file_path)
+                    if not content:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"No content found for: {file_path}",
+                        }
+                        continue
+
+                    document = self.processor.process_file(file_path, content)
+                    if not document:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to process: {file_path}",
+                        }
+                        continue
+
+                    chunks = self.processor.split_content_for_embedding(document)
+                    if self.vector_store.add_document(document, chunks):
+                        stats["processed"] += 1
+                        stats["total_chunks"] += len(chunks)
+                        yield {
+                            "type": "file_complete",
+                            "message": f"✅ Processed: {file_path} ({len(chunks)} chunks)",
+                            "file_path": file_path,
+                            "chunks": len(chunks),
+                        }
+                    else:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to add to vector store: {file_path}",
+                        }
+
+                except Exception as e:
+                    stats["failed"] += 1
+                    yield {
+                        "type": "error",
+                        "message": f"Error processing {file_path}: {str(e)}",
+                    }
+
+            total_time = time.time() - start_time
+            yield {"type": "status", "message": "Finalizing...", "progress": 95}
+
+            result = {
+                "type": "complete",
+                "message": f'Build index complete! Processed {stats["processed"]} files, {stats["failed"]} failed',
+                "stats": stats,
+                "total_time_seconds": round(total_time, 2),
+                "progress": 100,
+            }
+            yield result
+
+        except Exception as e:
+            yield {"type": "error", "message": f"Build index failed: {str(e)}"}
+
     def incremental_sync(self) -> Dict[str, any]:
         """Perform incremental synchronization based on git changes."""
         print("Starting incremental sync...")
@@ -125,7 +262,10 @@ class SyncCoordinator:
             }
 
             for change in changes:
-                if change.change_type in ["A", "M"]:  # Added or Modified
+                if change.status in [
+                    FileStatus.ADDED,
+                    FileStatus.MODIFIED,
+                ]:  # Added or Modified
                     try:
                         # Get file content
                         content = self.git_manager.get_file_content(change.file_path)
@@ -162,7 +302,7 @@ class SyncCoordinator:
                 "changes": [
                     {
                         "file_path": change.file_path,
-                        "change_type": change.change_type,
+                        "status": change.status.value,
                         "old_file_path": change.old_file_path,
                     }
                     for change in changes
@@ -199,20 +339,32 @@ class SyncCoordinator:
             # Repository info
             repo_files = len(self.git_manager.get_all_markdown_files())
 
+            repository_info = {
+                "url": self.git_manager.repo_url,
+                "local_path": str(self.git_manager.local_path),
+                "branch": self.git_manager.branch,
+                "total_md_files": repo_files,
+                "status": "available",
+            }
+
+            # Add commit info directly to repository level if available
+            if sync_info and "commit_hash" in sync_info:
+                repository_info["commit_hash"] = sync_info["commit_hash"]
+                repository_info["last_sync"] = sync_info["commit_date"]
+
             return {
-                "repository": {
-                    "url": self.git_manager.repo_url,
-                    "local_path": str(self.git_manager.local_path),
-                    "branch": self.git_manager.branch,
-                    "last_commit": sync_info,
-                    "total_md_files": repo_files,
-                },
+                "repository": repository_info,
                 "vector_store": vector_stats,
                 "sync_status": "ready",
             }
 
         except Exception as e:
-            return {"error": str(e)}
+            return {
+                "repository": {"status": "error", "error": str(e)},
+                "vector_store": {"status": "error", "error": str(e)},
+                "sync_status": "error",
+                "error": str(e),
+            }
 
     def cleanup_orphaned_embeddings(self) -> Dict[str, int]:
         """Remove embeddings for files that no longer exist in the repository."""

@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Build Index Monitor - Obsidian Vector Search Admin{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/build_index_monitor.css">
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>🚀 Build Index Control Panel</h3>
+    </div>
+    <div class="card-body">
+        <div class="control-panel">
+            <button id="startBtn" class="btn btn-primary" onclick="startBuildIndex()">
+                ▶️ Start Build Index
+            </button>
+            <button id="stopBtn" class="btn btn-danger" onclick="stopBuildIndex()" disabled>
+                ⏹️ Stop
+            </button>
+            <button class="btn btn-warning" onclick="clearLog()">🧹 Clear Log</button>
+            <button class="btn btn-success" onclick="location.href='/'">🏠 Dashboard</button>
+        </div>
+    </div>
+</div>
+
+<div class="progress-section">
+    <div class="status info" id="currentStatus">
+        Ready to start build index process
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-text" id="progressText">Progress: 0%</div>
+    </div>
+
+    <div id="etaDisplay" class="eta-highlight" style="display: none;">
+        ETA: <span id="etaTime">calculating...</span>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="totalFiles">-</div>
+        <div class="stat-label">📁 Total Files</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="currentFile">-</div>
+        <div class="stat-label">📄 Current File</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="processed">-</div>
+        <div class="stat-label">✅ Processed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="failed">-</div>
+        <div class="stat-label">❌ Failed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalChunks">-</div>
+        <div class="stat-label">📦 Total Chunks</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="totalTime">-</div>
+        <div class="stat-label">⏱️ Total Time</div>
+    </div>
+</div>
+
+<div class="log-section">
+    <div class="log-header">
+        <h4>📋 Process Log</h4>
+        <span id="connectionStatus" style="font-size: 14px; color: #6c757d;">Disconnected</span>
+    </div>
+    <div class="log" id="logContainer"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_BASE_URL = '{{ api_base_url }}';
+    let eventSource = null;
+    let startTime = null;
+    let totalProcessed = 0;
+    let totalFailed = 0;
+    let totalChunks = 0;
+
+    function startBuildIndex() {
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        startBtn.innerHTML = '<span class="loading-spinner"></span>Starting...';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        // Reset stats
+        totalProcessed = 0;
+        totalFailed = 0;
+        totalChunks = 0;
+
+        startTime = new Date();
+        updateCurrentStatus('Connecting to build index stream...', 'info');
+        updateConnectionStatus('Connecting...');
+
+        eventSource = new EventSource(`{{ external_api_url }}/api/obs-vctr-srch/build-index-stream`, {
+            withCredentials: false
+        });
+
+        eventSource.onmessage = function (event) {
+            try {
+                const data = JSON.parse(event.data);
+                handleProgressUpdate(data);
+            } catch (e) {
+                console.error('Failed to parse SSE data:', e);
+                addLog('Error: Failed to parse server response', 'error');
+            }
+        };
+
+        eventSource.onerror = function (event) {
+            console.error('SSE error:', event);
+            addLog('❌ Connection error occurred', 'error');
+            updateConnectionStatus('Connection Error');
+            stopBuildIndex();
+        };
+
+        eventSource.onopen = function (event) {
+            addLog('🔗 Connected to build index stream', 'success');
+            updateConnectionStatus('Connected');
+            startBtn.innerHTML = '🔄 Building...';
+        };
+    }
+
+    function stopBuildIndex() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        startBtn.innerHTML = '▶️ Start Build Index';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        document.getElementById('etaDisplay').style.display = 'none';
+        updateCurrentStatus('Build process stopped', 'warning');
+        updateConnectionStatus('Disconnected');
+    }
+
+    function updateConnectionStatus(status) {
+        document.getElementById('connectionStatus').textContent = status;
+    }
+
+    function handleProgressUpdate(data) {
+        addLog(`${data.message}`, data.type);
+
+        switch (data.type) {
+            case 'status':
+                updateCurrentStatus(data.message, 'info');
+                if (data.progress !== undefined) {
+                    updateProgress(data.progress);
+                }
+                if (data.total_files !== undefined) {
+                    document.getElementById('totalFiles').textContent = data.total_files;
+                }
+                break;
+
+            case 'progress':
+                updateCurrentStatus(data.message, 'info');
+                updateProgress(data.progress);
+                if (data.current_file !== undefined) {
+                    document.getElementById('currentFile').textContent = data.current_file;
+                }
+                if (data.eta !== undefined && data.eta !== 'calculating...') {
+                    document.getElementById('etaTime').textContent = data.eta;
+                    document.getElementById('etaDisplay').style.display = 'block';
+                }
+                break;
+
+            case 'file_complete':
+                updateCurrentStatus(data.message, 'success');
+                totalProcessed++;
+                if (data.chunks) {
+                    totalChunks += data.chunks;
+                }
+                updateStats();
+                break;
+
+            case 'complete':
+                updateCurrentStatus('🎉 ' + data.message, 'success');
+                updateProgress(100);
+                document.getElementById('etaDisplay').style.display = 'none';
+                if (data.stats) {
+                    totalProcessed = data.stats.processed;
+                    totalFailed = data.stats.failed;
+                    totalChunks = data.stats.total_chunks;
+                    updateStats();
+                }
+                if (data.total_time_seconds) {
+                    document.getElementById('totalTime').textContent = formatTime(data.total_time_seconds);
+                }
+                stopBuildIndex();
+                addLog(`🎊 Build completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
+                break;
+
+            case 'error':
+                updateCurrentStatus('❌ ' + data.message, 'error');
+                stopBuildIndex();
+                break;
+
+            case 'warning':
+                updateCurrentStatus('⚠️ ' + data.message, 'warning');
+                totalFailed++;
+                updateStats();
+                break;
+        }
+    }
+
+    function updateCurrentStatus(message, type) {
+        const statusElement = document.getElementById('currentStatus');
+        statusElement.textContent = message;
+        statusElement.className = `status ${type}`;
+    }
+
+    function updateProgress(percentage) {
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+
+        progressFill.style.width = Math.min(percentage, 100) + '%';
+        progressText.textContent = `Progress: ${Math.round(percentage)}%`;
+    }
+
+    function updateStats() {
+        document.getElementById('processed').textContent = totalProcessed;
+        document.getElementById('failed').textContent = totalFailed;
+        document.getElementById('totalChunks').textContent = totalChunks;
+    }
+
+    function addLog(message, type = 'info') {
+        const logContainer = document.getElementById('logContainer');
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry ${type}`;
+
+        const icon = {
+            'error': '❌',
+            'warning': '⚠️',
+            'success': '✅',
+            'info': 'ℹ️'
+        }[type] || 'ℹ️';
+
+        logEntry.textContent = `[${timestamp}] ${icon} ${message}`;
+        logContainer.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function clearLog() {
+        document.getElementById('logContainer').innerHTML = '';
+        addLog('Log cleared', 'info');
+    }
+
+    function formatTime(seconds) {
+        if (seconds < 60) return Math.round(seconds) + 's';
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${minutes}m ${secs}s`;
+    }
+
+    // Update total time periodically when running
+    setInterval(() => {
+        if (startTime && eventSource && eventSource.readyState === EventSource.OPEN) {
+            const elapsed = (new Date() - startTime) / 1000;
+            document.getElementById('totalTime').textContent = formatTime(elapsed);
+        }
+    }, 1000);
+
+    // Initial log entry
+    addLog('Build Index Monitor ready', 'info');
+</script>
+{% endblock %}

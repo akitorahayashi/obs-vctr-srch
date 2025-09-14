@@ -1,0 +1,115 @@
+"""
+Admin app for managing Obsidian Vector Search operations.
+This is a standalone tool for administrators to monitor and control build index operations.
+"""
+
+import os
+from pathlib import Path
+
+import httpx
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+app = FastAPI(
+    title="Obsidian Vector Search - Admin Console",
+    description="Administrative tools for managing vector search operations",
+    version="1.0.0",
+)
+
+# Get the directory containing this file
+current_dir = Path(__file__).parent
+templates = Jinja2Templates(directory=str(current_dir / "templates"))
+
+# Mount static files
+static_dir = current_dir / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Internal API URL (Docker internal communication)
+INTERNAL_API_URL = os.getenv("INTERNAL_API_URL", "http://api:8000")
+# External API URL (Browser to API communication)
+EXTERNAL_API_URL = os.getenv("EXTERNAL_API_URL", "http://127.0.0.1:8005")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Main admin dashboard."""
+    return templates.TemplateResponse(
+        "dashboard.html", {"request": request, "api_base_url": INTERNAL_API_URL}
+    )
+
+
+@app.get("/build-index-monitor", response_class=HTMLResponse)
+async def build_index_monitor(request: Request):
+    """Build index monitoring page."""
+    return templates.TemplateResponse(
+        "build_index_monitor.html",
+        {
+            "request": request,
+            "api_base_url": INTERNAL_API_URL,
+            "external_api_url": EXTERNAL_API_URL,
+        },
+    )
+
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint for admin service."""
+    return {"status": "ok"}
+
+
+@app.get("/api/status")
+async def get_api_status():
+    """Check if the main API is accessible."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{INTERNAL_API_URL}/health", timeout=5.0)
+            if response.status_code == 200:
+                # Also check obs health
+                obs_response = await client.get(
+                    f"{INTERNAL_API_URL}/api/obs-vctr-srch/health", timeout=5.0
+                )
+                return {
+                    "status": "healthy",
+                    "api_health": response.json(),
+                    "obs_health": (
+                        obs_response.json() if obs_response.status_code == 200 else None
+                    ),
+                    "api_url": INTERNAL_API_URL,
+                }
+            else:
+                return {"status": "unhealthy", "api_url": INTERNAL_API_URL}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "api_url": INTERNAL_API_URL}
+
+
+@app.get("/api/repository-status")
+async def get_repository_status():
+    """Get repository status from the main API."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{INTERNAL_API_URL}/api/obs-vctr-srch/status", timeout=10.0
+            )
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"API returned status code {response.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("ADMIN_HOST", "0.0.0.0")
+    port = int(os.getenv("ADMIN_PORT", "8010"))
+
+    print(f"Starting Obsidian Vector Search Admin Console on {host}:{port}")
+    print(f"Main API URL: {INTERNAL_API_URL}")
+
+    # Only enable reload in development environment
+    reload = os.getenv("ENVIRONMENT", "production") == "development"
+    uvicorn.run(app, host=host, port=port, reload=reload)
