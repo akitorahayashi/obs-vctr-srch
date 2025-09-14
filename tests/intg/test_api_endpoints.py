@@ -27,10 +27,10 @@ class TestAPIEndpoints:
         assert "repository" in response_data
         assert "vector_store" in response_data
 
-    def test_obsidian_sync_endpoint_exists(self):
-        """Test that Obsidian sync endpoint exists."""
+    def test_obsidian_sync_endpoint_removed(self):
+        """Test that Obsidian sync endpoint has been removed from public API."""
         response = self.client.post("/api/obs-vctr-srch/sync")
-        assert response.status_code != 404
+        assert response.status_code == 404  # Should not exist in public API
 
     def test_obsidian_search_endpoint_exists(self):
         """Test that Obsidian search endpoint exists."""
@@ -38,11 +38,12 @@ class TestAPIEndpoints:
         assert response.status_code != 404
 
     def test_api_endpoints_accessibility(self):
-        """Test that all API endpoints are properly loaded and accessible."""
+        """Test that public API endpoints are properly loaded and accessible."""
+        # Only test endpoints that should exist in public API
         endpoints_to_test = [
             ("/api/obs-vctr-srch/status", "GET"),
-            ("/api/obs-vctr-srch/sync", "POST"),
             ("/api/obs-vctr-srch/search", "POST"),
+            ("/api/obs-vctr-srch/health", "GET"),
         ]
 
         for endpoint, method in endpoints_to_test:
@@ -56,7 +57,7 @@ class TestAPIEndpoints:
             # Should not be 404 (endpoint exists)
             assert (
                 response.status_code != 404
-            ), f"Endpoint {method} {endpoint} should exist"
+            ), f"Endpoint {method} {endpoint} should exist in public API"
 
     def test_search_endpoint_error_handling(self):
         """Test search endpoint handles invalid requests properly."""
@@ -90,14 +91,19 @@ class TestAPIEndpoints:
             422,
         ], "Negative n_results should return client error"
 
-    def test_sync_endpoint_error_handling(self):
-        """Test sync endpoint handles errors gracefully."""
-        # Sync endpoint should exist and handle requests (may fail due to config but shouldn't crash)
-        response = self.client.post("/api/obs-vctr-srch/sync")
-        assert response.status_code != 404, "Sync endpoint should exist"
-        assert (
-            response.status_code != 500
-        ), "Sync endpoint should not crash with 500 error"
+    def test_admin_endpoints_removed_from_public_api(self):
+        """Test that admin endpoints have been removed from public API."""
+        admin_endpoints = [
+            "/api/obs-vctr-srch/sync",
+            "/api/obs-vctr-srch/build-index",
+            "/api/obs-vctr-srch/build-index-stream",
+        ]
+
+        for endpoint in admin_endpoints:
+            response = self.client.post(endpoint)
+            assert (
+                response.status_code == 404
+            ), f"Admin endpoint {endpoint} should not exist in public API"
 
     def test_status_endpoint_structure(self):
         """Test status endpoint returns consistent structure even on errors."""

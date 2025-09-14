@@ -3,14 +3,18 @@ Admin app for managing Obsidian Vector Search operations.
 This is a standalone tool for administrators to monitor and control build index operations.
 """
 
+import json
 import os
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from src.dependencies import get_sync_coordinator
+from src.services import SyncCoordinator
 
 app = FastAPI(
     title="Obsidian Vector Search - Admin Console",
@@ -49,7 +53,6 @@ async def build_index_monitor(request: Request):
         {
             "request": request,
             "api_base_url": INTERNAL_API_URL,
-            "external_api_url": EXTERNAL_API_URL,
         },
     )
 
@@ -99,6 +102,48 @@ async def get_repository_status():
                 return {"error": f"API returned status code {response.status_code}"}
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/api/sync")
+async def sync_stream(
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+):
+    """Stream incremental sync progress."""
+
+    async def generate_progress():
+        async for progress in coordinator.incremental_sync_stream():
+            yield f"data: {json.dumps(progress)}\n\n"
+
+    return StreamingResponse(
+        generate_progress(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+@app.post("/api/build-index")
+async def build_index_stream(
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
+):
+    """Stream full rebuild progress."""
+
+    async def generate_progress():
+        async for progress in coordinator.rebuild_index_stream():
+            yield f"data: {json.dumps(progress)}\n\n"
+
+    return StreamingResponse(
+        generate_progress(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 if __name__ == "__main__":

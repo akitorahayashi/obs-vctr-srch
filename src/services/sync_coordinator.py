@@ -20,71 +20,6 @@ class SyncCoordinator:
         self.vector_store = vector_store
         self.processor = processor
 
-    def initial_setup(self) -> Dict[str, any]:
-        """Perform initial repository setup and full sync."""
-        print("Starting initial setup...")
-
-        # Setup repository
-        if not self.git_manager.setup_repository():
-            return {"success": False, "error": "Failed to setup repository"}
-
-        # Perform full sync
-        return self.full_sync()
-
-    def full_sync(self) -> Dict[str, any]:
-        """Perform a full synchronization of all files."""
-        print("Starting full synchronization...")
-
-        try:
-            # Get all markdown files from git manager (works with both real and mock)
-            md_files = self.git_manager.get_all_markdown_files()
-
-            if not md_files:
-                return {
-                    "success": True,
-                    "message": "No markdown files found",
-                    "stats": {"processed": 0, "failed": 0},
-                }
-
-            stats = {"processed": 0, "failed": 0, "total_chunks": 0}
-
-            for file_path in md_files:
-                try:
-                    # Get file content from git manager (works with both real and mock)
-                    content = self.git_manager.get_file_content(file_path)
-                    if not content:
-                        stats["failed"] += 1
-                        continue
-
-                    # Process the file
-                    document = self.processor.process_file(file_path, content)
-                    if not document:
-                        stats["failed"] += 1
-                        continue
-
-                    # Split into chunks for embedding
-                    chunks = self.processor.split_content_for_embedding(document)
-
-                    # Add to vector store
-                    if self.vector_store.add_document(document, chunks):
-                        stats["processed"] += 1
-                        stats["total_chunks"] += len(chunks)
-                    else:
-                        stats["failed"] += 1
-
-                except Exception as e:
-                    print(f"Failed to process {file_path}: {e}")
-                    stats["failed"] += 1
-
-            return {
-                "success": True,
-                "message": f"Processed {stats['processed']} files, {stats['failed']} failed",
-                "stats": stats,
-            }
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
     async def rebuild_index_stream(self) -> AsyncGenerator[Dict[str, any], None]:
         """Rebuild the entire vector index with streaming progress updates."""
         try:
@@ -230,27 +165,55 @@ class SyncCoordinator:
         except Exception as e:
             yield {"type": "error", "message": f"Build index failed: {str(e)}"}
 
-    def incremental_sync(self) -> Dict[str, any]:
-        """Perform incremental synchronization based on git changes."""
-        print("Starting incremental sync...")
-
+    async def incremental_sync_stream(self) -> AsyncGenerator[Dict[str, any], None]:
+        """Perform incremental synchronization with streaming progress updates."""
         try:
+            yield {
+                "type": "status",
+                "message": "Starting incremental sync...",
+                "progress": 0,
+            }
+
             # Get changed files
+            yield {
+                "type": "status",
+                "message": "Detecting file changes...",
+                "progress": 10,
+            }
             changes = self.git_manager.get_changed_files()
 
             if not changes:
-                return {
-                    "success": True,
-                    "message": "No changes detected",
-                    "stats": {"processed": 0, "deleted": 0, "renamed": 0},
+                yield {
+                    "type": "complete",
+                    "message": "No changes detected - sync up to date",
+                    "stats": {"processed": 0, "deleted": 0, "renamed": 0, "failed": 0},
                 }
+                return
 
-            # Process file changes in vector store
+            yield {
+                "type": "status",
+                "message": f"Found {len(changes)} file changes",
+                "progress": 20,
+                "total_changes": len(changes),
+            }
+
+            # Process file changes in vector store (deletions and renames)
+            yield {
+                "type": "status",
+                "message": "Processing deletions and renames...",
+                "progress": 25,
+            }
             change_stats = self.vector_store.process_file_changes(changes)
 
             # Pull the latest changes
+            yield {
+                "type": "status",
+                "message": "Pulling latest changes from repository...",
+                "progress": 30,
+            }
             if not self.git_manager.pull_changes():
-                return {"success": False, "error": "Failed to pull changes"}
+                yield {"type": "error", "message": "Failed to pull changes"}
+                return
 
             # Process added/modified files
             stats = {
@@ -261,56 +224,116 @@ class SyncCoordinator:
                 "renamed": change_stats.get("renamed", 0),
             }
 
-            for change in changes:
-                if change.status in [
-                    FileStatus.ADDED,
-                    FileStatus.MODIFIED,
-                ]:  # Added or Modified
-                    try:
-                        # Get file content
-                        content = self.git_manager.get_file_content(change.file_path)
-                        if not content:
-                            stats["failed"] += 1
-                            continue
+            # Filter for added/modified files that need processing
+            files_to_process = [
+                change
+                for change in changes
+                if change.status in [FileStatus.ADDED, FileStatus.MODIFIED]
+            ]
 
-                        # Process the file
-                        document = self.processor.process_file(
-                            change.file_path, content
-                        )
-                        if not document:
-                            stats["failed"] += 1
-                            continue
+            if not files_to_process:
+                yield {
+                    "type": "complete",
+                    "message": "Sync complete - only deletions/renames processed",
+                    "stats": stats,
+                }
+                return
 
-                        # Split into chunks for embedding
-                        chunks = self.processor.split_content_for_embedding(document)
+            total_files = len(files_to_process)
+            start_time = time.time()
 
-                        # Add to vector store
-                        if self.vector_store.add_document(document, chunks):
-                            stats["processed"] += 1
-                            stats["total_chunks"] += len(chunks)
-                        else:
-                            stats["failed"] += 1
-
-                    except Exception as e:
-                        print(f"Failed to process {change.file_path}: {e}")
-                        stats["failed"] += 1
-
-            return {
-                "success": True,
-                "message": f"Processed {len(changes)} changes",
-                "stats": stats,
-                "changes": [
-                    {
-                        "file_path": change.file_path,
-                        "status": change.status.value,
-                        "old_file_path": change.old_file_path,
-                    }
-                    for change in changes
-                ],
+            yield {
+                "type": "status",
+                "message": f"Processing {total_files} added/modified files...",
+                "progress": 35,
+                "total_files": total_files,
             }
 
+            for i, change in enumerate(files_to_process):
+                progress = 35 + (i / total_files) * 60
+
+                # Calculate ETA
+                if i > 0:
+                    elapsed = time.time() - start_time
+                    avg_time_per_file = elapsed / i
+                    remaining_files = total_files - i
+                    eta_seconds = remaining_files * avg_time_per_file
+                    eta_str = f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                else:
+                    eta_str = "calculating..."
+
+                yield {
+                    "type": "progress",
+                    "message": f"Processing: {change.file_path}",
+                    "progress": progress,
+                    "current_file": i + 1,
+                    "total_files": total_files,
+                    "eta": eta_str,
+                }
+
+                try:
+                    # Get file content
+                    content = self.git_manager.get_file_content(change.file_path)
+                    if not content:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"No content found for: {change.file_path}",
+                        }
+                        continue
+
+                    # Process the file
+                    document = self.processor.process_file(change.file_path, content)
+                    if not document:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to process: {change.file_path}",
+                        }
+                        continue
+
+                    # Split into chunks for embedding
+                    chunks = self.processor.split_content_for_embedding(document)
+
+                    # Add to vector store
+                    if self.vector_store.add_document(document, chunks):
+                        stats["processed"] += 1
+                        stats["total_chunks"] += len(chunks)
+                        yield {
+                            "type": "file_complete",
+                            "message": f"✅ Synced: {change.file_path} ({len(chunks)} chunks)",
+                            "file_path": change.file_path,
+                            "chunks": len(chunks),
+                            "status": change.status.value,
+                        }
+                    else:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to add to vector store: {change.file_path}",
+                        }
+
+                except Exception as e:
+                    stats["failed"] += 1
+                    yield {
+                        "type": "error",
+                        "message": f"Error processing {change.file_path}: {str(e)}",
+                    }
+
+            total_time = time.time() - start_time
+            yield {"type": "status", "message": "Finalizing sync...", "progress": 95}
+
+            result = {
+                "type": "complete",
+                "message": f'Incremental sync complete! Processed {stats["processed"]} files, {stats["failed"]} failed, {stats["deleted"]} deleted, {stats["renamed"]} renamed',
+                "stats": stats,
+                "total_time_seconds": round(total_time, 2),
+                "progress": 100,
+            }
+            yield result
+
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            yield {"type": "error", "message": f"Incremental sync failed: {str(e)}"}
 
     def search_documents(
         self,
@@ -395,69 +418,3 @@ class SyncCoordinator:
 
         except Exception as e:
             return {"error": str(e)}
-
-    def force_reindex_file(self, file_path: str) -> Dict[str, any]:
-        """Force re-indexing of a specific file."""
-        try:
-            content = self.git_manager.get_file_content(file_path)
-            if not content:
-                return {"success": False, "error": f"File not found: {file_path}"}
-
-            # Process the file
-            document = self.processor.process_file(file_path, content)
-            if not document:
-                return {
-                    "success": False,
-                    "error": f"Failed to process file: {file_path}",
-                }
-
-            # Split into chunks
-            chunks = self.processor.split_content_for_embedding(document)
-
-            # Add to vector store (this will remove existing chunks first)
-            if self.vector_store.add_document(document, chunks):
-                return {
-                    "success": True,
-                    "message": f"Re-indexed {file_path}",
-                    "chunks": len(chunks),
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": f"Failed to add to vector store: {file_path}",
-                }
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def rebuild_index(self) -> Dict[str, any]:
-        """Rebuild the entire vector index by clearing existing data and re-indexing all files."""
-        try:
-            print("🗑️  Clearing existing vector index...")
-
-            # Clear the collection
-            clear_result = self.vector_store.clear_collection()
-
-            if not clear_result["success"]:
-                return {"success": False, "error": clear_result["message"]}
-
-            print("✅ Vector index cleared successfully")
-            print("🔄 Starting full re-indexing...")
-
-            # Perform full sync to rebuild index
-            sync_result = self.full_sync()
-
-            if sync_result["success"]:
-                return {
-                    "success": True,
-                    "message": "Vector index rebuilt successfully",
-                    "stats": sync_result["stats"],
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": f"Failed to rebuild index: {sync_result.get('error', 'Unknown error')}",
-                }
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
