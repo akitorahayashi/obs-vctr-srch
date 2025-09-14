@@ -225,13 +225,13 @@ class TestVectorStore:
 
         # Check first result
         first_result = result[0]
-        assert first_result["id"] == "doc1#chunk_0"
-        assert first_result["content"] == "Document 1 content"
-        assert first_result["distance"] == 0.1
-        assert first_result["file_path"] == "doc1.md"
-        assert first_result["title"] == "Document 1"
-        assert first_result["tags"] == ["tag1", "tag2"]
-        assert first_result["links"] == ["link1"]
+        assert first_result.id == "doc1#chunk_0"
+        assert first_result.content == "Document 1 content"
+        assert first_result.distance == 0.1
+        assert first_result.file_path == "doc1.md"
+        assert first_result.title == "Document 1"
+        assert first_result.tags == ["tag1", "tag2"]
+        assert first_result.links == ["link1"]
 
     def test_search_with_filters(self):
         """Test search with file and tag filters."""

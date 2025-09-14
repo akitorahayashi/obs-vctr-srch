@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     OBSIDIAN_BRANCH: str = "main"
     VECTOR_DB_PATH: str = "./chroma_db"
 
+    # Development and debugging
+    DEBUG: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

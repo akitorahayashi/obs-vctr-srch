@@ -3,7 +3,7 @@
 {% block title %}Build Index Monitor - Obsidian Vector Search Admin{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('admin.static', filename='build_index_monitor.css') }}">
+<link rel="stylesheet" href="/static/build_index_monitor.css">
 {% endblock %}
 
 {% block content %}
@@ -34,7 +34,7 @@
         <div class="progress-fill" id="progressFill"></div>
         <div class="progress-text" id="progressText">Progress: 0%</div>
     </div>
-    
+
     <div id="etaDisplay" class="eta-highlight" style="display: none;">
         ETA: <span id="etaTime">calculating...</span>
     </div>
@@ -88,25 +88,25 @@
     function startBuildIndex() {
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        
+
         startBtn.innerHTML = '<span class="loading-spinner"></span>Starting...';
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        
+
         // Reset stats
         totalProcessed = 0;
         totalFailed = 0;
         totalChunks = 0;
-        
+
         startTime = new Date();
         updateCurrentStatus('Connecting to build index stream...', 'info');
         updateConnectionStatus('Connecting...');
-        
+
         eventSource = new EventSource(`{{ external_api_url }}/api/obs-vctr-srch/build-index-stream`, {
             withCredentials: false
         });
 
-        eventSource.onmessage = function(event) {
+        eventSource.onmessage = function (event) {
             try {
                 const data = JSON.parse(event.data);
                 handleProgressUpdate(data);
@@ -116,14 +116,14 @@
             }
         };
 
-        eventSource.onerror = function(event) {
+        eventSource.onerror = function (event) {
             console.error('SSE error:', event);
             addLog('❌ Connection error occurred', 'error');
             updateConnectionStatus('Connection Error');
             stopBuildIndex();
         };
 
-        eventSource.onopen = function(event) {
+        eventSource.onopen = function (event) {
             addLog('🔗 Connected to build index stream', 'success');
             updateConnectionStatus('Connected');
             startBtn.innerHTML = '🔄 Building...';
@@ -135,14 +135,14 @@
             eventSource.close();
             eventSource = null;
         }
-        
+
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        
+
         startBtn.innerHTML = '▶️ Start Build Index';
         startBtn.disabled = false;
         stopBtn.disabled = true;
-        
+
         document.getElementById('etaDisplay').style.display = 'none';
         updateCurrentStatus('Build process stopped', 'warning');
         updateConnectionStatus('Disconnected');
@@ -154,7 +154,7 @@
 
     function handleProgressUpdate(data) {
         addLog(`${data.message}`, data.type);
-        
+
         switch (data.type) {
             case 'status':
                 updateCurrentStatus(data.message, 'info');
@@ -165,7 +165,7 @@
                     document.getElementById('totalFiles').textContent = data.total_files;
                 }
                 break;
-                
+
             case 'progress':
                 updateCurrentStatus(data.message, 'info');
                 updateProgress(data.progress);
@@ -177,7 +177,7 @@
                     document.getElementById('etaDisplay').style.display = 'block';
                 }
                 break;
-                
+
             case 'file_complete':
                 updateCurrentStatus(data.message, 'success');
                 totalProcessed++;
@@ -186,7 +186,7 @@
                 }
                 updateStats();
                 break;
-                
+
             case 'complete':
                 updateCurrentStatus('🎉 ' + data.message, 'success');
                 updateProgress(100);
@@ -203,12 +203,12 @@
                 stopBuildIndex();
                 addLog(`🎊 Build completed successfully! Processed ${totalProcessed} files with ${totalChunks} chunks`, 'success');
                 break;
-                
+
             case 'error':
                 updateCurrentStatus('❌ ' + data.message, 'error');
                 stopBuildIndex();
                 break;
-                
+
             case 'warning':
                 updateCurrentStatus('⚠️ ' + data.message, 'warning');
                 totalFailed++;
@@ -226,7 +226,7 @@
     function updateProgress(percentage) {
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
-        
+
         progressFill.style.width = Math.min(percentage, 100) + '%';
         progressText.textContent = `Progress: ${Math.round(percentage)}%`;
     }
@@ -242,14 +242,14 @@
         const timestamp = new Date().toLocaleTimeString();
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry ${type}`;
-        
+
         const icon = {
             'error': '❌',
             'warning': '⚠️',
             'success': '✅',
             'info': 'ℹ️'
         }[type] || 'ℹ️';
-        
+
         logEntry.textContent = `[${timestamp}] ${icon} ${message}`;
         logContainer.appendChild(logEntry);
         logContainer.scrollTop = logContainer.scrollHeight;

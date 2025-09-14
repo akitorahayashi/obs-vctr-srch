@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Obsidian Vector Search - Admin Console{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('admin.static', filename='base.css') }}">
+    <link rel="stylesheet" href="/static/base.css">
     {% block head %}{% endblock %}
 </head>
+
 <body>
     <nav class="navbar">
         <div class="container">
@@ -20,16 +22,6 @@
     </nav>
 
     <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} mt-3" role="alert">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
         {% block content %}{% endblock %}
     </div>
 
@@ -41,4 +33,5 @@
 
     {% block scripts %}{% endblock %}
 </body>
+
 </html>

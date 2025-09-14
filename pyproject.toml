@@ -29,7 +29,6 @@ dev = [
     "pytest-xdist>=3.8.0",
     "python-dotenv>=1.0.0,<2.0.0",
     "ruff>=0.12.10",
-    "testcontainers>=4.6.0",
     "watchdog[watchmedo]>=4.0.1",
 ]
 

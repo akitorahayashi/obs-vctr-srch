@@ -46,8 +46,18 @@ async def build_index_monitor(request: Request):
     """Build index monitoring page."""
     return templates.TemplateResponse(
         "build_index_monitor.html",
-        {"request": request, "api_base_url": INTERNAL_API_URL, "external_api_url": EXTERNAL_API_URL}
+        {
+            "request": request,
+            "api_base_url": INTERNAL_API_URL,
+            "external_api_url": EXTERNAL_API_URL,
+        },
     )
+
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint for admin service."""
+    return {"status": "ok"}
 
 
 @app.get("/api/status")

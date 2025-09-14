@@ -7,9 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import Settings, get_settings
-from src.schemas import SearchRequest
-from src.services import SyncCoordinator
-from src.services.vector_store import VectorStore
+from src.services.sync_coordinator import SyncCoordinator
+from src.services.vector_store import SearchRequest, VectorStore
 
 router = APIRouter(prefix="/obs-vctr-srch", tags=["obs-vctr-srch"])
 
@@ -29,6 +28,7 @@ def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoor
                 branch=settings.OBSIDIAN_BRANCH,
                 github_token=settings.OBS_VAULT_TOKEN,
                 embedding_model=settings.EMBEDDING_MODEL_NAME,
+                debug_mode=settings.DEBUG,
             )
         except Exception as e:
             raise HTTPException(
@@ -40,15 +40,11 @@ def get_sync_coordinator(settings: Settings = Depends(get_settings)) -> SyncCoor
 
 @router.post("/sync", response_model=Dict[str, Any])
 async def sync_repository(
-    full_sync: bool = False,
     coordinator: SyncCoordinator = Depends(get_sync_coordinator),
 ):
-    """Synchronize repository with incremental or full sync."""
+    """Synchronize repository with incremental sync."""
     try:
-        if full_sync:
-            result = coordinator.full_sync()
-        else:
-            result = coordinator.incremental_sync()
+        result = coordinator.incremental_sync()
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")

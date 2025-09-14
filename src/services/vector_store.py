@@ -5,10 +5,31 @@ from typing import Dict, List, Optional
 
 import chromadb
 from chromadb.config import Settings
+from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 from .git_manager import FileChange
 from .obsidian_processor import ObsidianDocument
+
+
+class SearchRequest(BaseModel):
+    query: str
+    n_results: int = 10
+    file_filter: Optional[str] = None
+    tag_filter: Optional[List[str]] = None
+
+
+class SearchResult(BaseModel):
+    id: str
+    content: str
+    distance: float
+    file_path: str
+    title: str
+    chunk_index: int
+    tags: List[str]
+    links: List[str]
+    created_at: Optional[str]
+    modified_at: Optional[str]
 
 
 class VectorStore:
@@ -132,7 +153,7 @@ class VectorStore:
         n_results: int = 10,
         file_filter: Optional[str] = None,
         tag_filter: Optional[List[str]] = None,
-    ) -> List[Dict]:
+    ) -> List[SearchResult]:
         """Search for similar documents."""
         try:
             # Build where clause for filtering
@@ -171,18 +192,18 @@ class VectorStore:
                     if not any(tag in tags for tag in tag_filter):
                         continue
 
-                result = {
-                    "id": results["ids"][0][i],
-                    "content": results["documents"][0][i],
-                    "distance": results["distances"][0][i],
-                    "file_path": metadata["file_path"],
-                    "title": metadata["title"],
-                    "chunk_index": metadata["chunk_index"],
-                    "tags": tags,
-                    "links": links,
-                    "created_at": metadata.get("created_at"),
-                    "modified_at": metadata.get("modified_at"),
-                }
+                result = SearchResult(
+                    id=results["ids"][0][i],
+                    content=results["documents"][0][i],
+                    distance=results["distances"][0][i],
+                    file_path=metadata["file_path"],
+                    title=metadata["title"],
+                    chunk_index=metadata["chunk_index"],
+                    tags=tags,
+                    links=links,
+                    created_at=metadata.get("created_at"),
+                    modified_at=metadata.get("modified_at"),
+                )
 
                 formatted_results.append(result)
 

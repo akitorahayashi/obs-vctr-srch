@@ -1,11 +1,11 @@
 import os
+import subprocess
 import time
 from typing import Generator
 
 import httpx
 import pytest
 from dotenv import load_dotenv
-from testcontainers.compose import DockerCompose
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,27 +18,61 @@ os.environ["TEST_PORT"] = os.getenv("TEST_PORT", "8005")
 @pytest.fixture(scope="session", autouse=True)
 def e2e_setup() -> Generator[None, None, None]:
     """
-    Manages the lifecycle of the application for end-to-end testing using testcontainers.
+    Manages the lifecycle of the application for end-to-end testing.
     """
+    # Determine if sudo should be used based on environment variable
+    use_sudo = os.getenv("SUDO") == "true"
+    docker_command = ["sudo", "-E", "docker"] if use_sudo else ["docker"]
+
     host_bind_ip = os.getenv("HOST_BIND_IP", "127.0.0.1")
     host_port = os.getenv("TEST_PORT", "8005")
     health_url = f"http://{host_bind_ip}:{host_port}/health"
 
-    # Initialize Docker Compose with testcontainers and isolated project name via env var
+    # Initialize Docker Compose project name
     test_project_name = os.getenv("TEST_PROJECT_NAME", "obs-vctr-srch-test")
-    os.environ["COMPOSE_PROJECT_NAME"] = test_project_name
-    compose = DockerCompose(
-        ".",
-        compose_file_name=["docker-compose.yml", "docker-compose.test.override.yml"],
-    )
+
+    # Define compose commands
+    compose_up_command = docker_command + [
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.test.override.yml",
+        "--project-name",
+        test_project_name,
+        "up",
+        "-d",
+    ]
+    compose_down_command = docker_command + [
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.test.override.yml",
+        "--project-name",
+        test_project_name,
+        "down",
+        "--remove-orphans",
+    ]
+    compose_logs_command = docker_command + [
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.test.override.yml",
+        "--project-name",
+        test_project_name,
+        "logs",
+    ]
 
     try:
-        # Start the containers
-        compose.start()
+        subprocess.run(
+            compose_up_command, check=True, timeout=600, env=os.environ
+        )  # 10 minutes timeout
 
         # Health Check
         start_time = time.time()
-        timeout = 120  # 2 minutes for API startup including potential build
+        timeout = 600  # 10 minutes for API startup including model download
         is_healthy = False
         while time.time() - start_time < timeout:
             try:
@@ -73,17 +107,28 @@ def e2e_setup() -> Generator[None, None, None]:
             time.sleep(3)
 
         if not is_healthy:
+            # Dump logs for debugging on health check failure
+            print("\n📄 Dumping logs for debugging...")
+            subprocess.run(compose_logs_command, check=False)
+            # Ensure teardown on health check failure
             print("\n🛑 Stopping E2E services due to health check failure...")
-            compose.stop()
+            subprocess.run(compose_down_command, check=False)
             pytest.fail(f"API did not become healthy within {timeout} seconds.")
 
         yield
 
-    except Exception as e:
-        print(f"\n🛑 Failed to start services: {e}")
-        compose.stop()
+    except subprocess.CalledProcessError as e:
+        print("\n🛑 compose up failed; performing cleanup...")
+        if hasattr(e, "stdout") and hasattr(e, "stderr"):
+            print(f"Exit code: {e.returncode}")
+            print(f"STDOUT: {e.stdout}")
+            print(f"STDERR: {e.stderr}")
+        subprocess.run(compose_down_command, check=False)
         raise
     finally:
+        # Dump logs for debugging
+        print("\n📄 Dumping logs for debugging...")
+        subprocess.run(compose_logs_command, check=False)
         # Stop services
         print("\n🛑 Stopping E2E services...")
-        compose.stop()
+        subprocess.run(compose_down_command, check=False)

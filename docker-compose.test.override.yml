@@ -6,6 +6,10 @@ services:
       - "${HOST_BIND_IP}:${TEST_PORT}:8000"
     volumes:
       - "./src:/app/src"
+      - "./dev:/app/dev"
+    environment:
+      - EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+      - DEBUG=true
 
   admin:
     build:

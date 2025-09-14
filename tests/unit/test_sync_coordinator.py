@@ -19,7 +19,7 @@ class TestSyncCoordinator:
         self.github_token = "test_token"
 
         with (
-            patch("src.services.sync_coordinator.GitManager"),
+            patch("src.services.sync_coordinator.create_git_manager"),
             patch("src.services.sync_coordinator.ObsidianProcessor"),
             patch("src.services.sync_coordinator.VectorStore"),
         ):

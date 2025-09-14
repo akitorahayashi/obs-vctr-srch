@@ -3,7 +3,8 @@
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .git_manager import GitManager
+from ..protocols.git_manager_protocol import GitManagerProtocol
+from .git_manager_factory import create_git_manager
 from .obsidian_processor import ObsidianProcessor
 from .vector_store import VectorStore
 
@@ -19,14 +20,22 @@ class SyncCoordinator:
         branch: str = "main",
         github_token: str = "",
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        processing_path: str = None,
+        debug_mode: bool = False,
     ):
-        self.git_manager = GitManager(repo_url, local_path, branch, github_token)
+        self.git_manager: GitManagerProtocol = create_git_manager(
+            repo_url, local_path, branch, github_token, debug_mode
+        )
         self.processor = ObsidianProcessor()
         self.vector_store = VectorStore(
             persist_directory=vector_store_path, model_name=embedding_model
         )
 
         self.local_path = Path(local_path)
+        # Use processing_path if provided, otherwise use local_path
+        self.processing_path = (
+            Path(processing_path) if processing_path else self.local_path
+        )
 
     def initial_setup(self) -> Dict[str, any]:
         """Perform initial repository setup and full sync."""
@@ -44,7 +53,7 @@ class SyncCoordinator:
         print("Starting full synchronization...")
 
         try:
-            # Get all markdown files
+            # Get all markdown files from git manager (works with both real and mock)
             md_files = self.git_manager.get_all_markdown_files()
 
             if not md_files:
@@ -58,7 +67,7 @@ class SyncCoordinator:
 
             for file_path in md_files:
                 try:
-                    # Get file content
+                    # Get file content from git manager (works with both real and mock)
                     content = self.git_manager.get_file_content(file_path)
                     if not content:
                         stats["failed"] += 1
@@ -92,6 +101,30 @@ class SyncCoordinator:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _get_markdown_files_from_processing_path(self) -> List[str]:
+        """Get all markdown files from the processing path."""
+        if not self.processing_path.exists():
+            return []
+
+        md_files = []
+        for file_path in self.processing_path.rglob("*.md"):
+            relative_path = file_path.relative_to(self.processing_path)
+            md_files.append(str(relative_path))
+
+        return md_files
+
+    def _get_file_content_from_processing_path(self, file_path: str) -> str:
+        """Get file content from the processing path."""
+        full_path = self.processing_path / file_path
+        if not full_path.exists():
+            return ""
+
+        try:
+            return full_path.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"Failed to read {file_path}: {e}")
+            return ""
 
     def incremental_sync(self) -> Dict[str, any]:
         """Perform incremental synchronization based on git changes."""
@@ -171,6 +204,30 @@ class SyncCoordinator:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _get_markdown_files_from_processing_path(self) -> List[str]:
+        """Get all markdown files from the processing path."""
+        if not self.processing_path.exists():
+            return []
+
+        md_files = []
+        for file_path in self.processing_path.rglob("*.md"):
+            relative_path = file_path.relative_to(self.processing_path)
+            md_files.append(str(relative_path))
+
+        return md_files
+
+    def _get_file_content_from_processing_path(self, file_path: str) -> str:
+        """Get file content from the processing path."""
+        full_path = self.processing_path / file_path
+        if not full_path.exists():
+            return ""
+
+        try:
+            return full_path.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"Failed to read {file_path}: {e}")
+            return ""
 
     def search_documents(
         self,
