@@ -105,9 +105,7 @@ async def get_repository_status():
 
 @app.post("/api/sync")
 async def sync_stream(
-    coordinator: SyncCoordinator = Depends(
-        get_sync_coordinator
-    ),  # noqa: B008 (FastAPI DI)
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
 ):
     """Stream incremental sync progress."""
 
@@ -128,9 +126,7 @@ async def sync_stream(
 
 @app.post("/api/build-index")
 async def build_index_stream(
-    coordinator: SyncCoordinator = Depends(
-        get_sync_coordinator
-    ),  # noqa: B008 (FastAPI DI)
+    coordinator: SyncCoordinator = Depends(get_sync_coordinator),
 ):
     """Stream full rebuild progress."""
 

@@ -157,7 +157,7 @@ class SyncCoordinator:
                     stats["failed"] += 1
                     yield {
                         "type": "error",
-                        "message": f"Error processing {file_path}: {str(e)}",
+                        "message": f"Error processing {file_path}: {e!s}",
                     }
 
             total_time = time.time() - start_time
@@ -173,7 +173,7 @@ class SyncCoordinator:
             yield result
 
         except Exception as e:  # noqa: BLE001 - stream safety
-            yield {"type": "error", "message": f"Build index failed: {str(e)}"}
+            yield {"type": "error", "message": f"Build index failed: {e!s}"}
 
     async def incremental_sync_stream(self) -> AsyncGenerator[Dict[str, Any], None]:
         """Perform incremental synchronization with streaming progress updates."""
@@ -336,7 +336,7 @@ class SyncCoordinator:
                     stats["failed"] += 1
                     yield {
                         "type": "error",
-                        "message": f"Error processing {change.file_path}: {str(e)}",
+                        "message": f"Error processing {change.file_path}: {e!s}",
                     }
 
             total_time = time.time() - start_time
@@ -352,7 +352,7 @@ class SyncCoordinator:
             yield result
 
         except Exception as e:  # noqa: BLE001 - stream safety
-            yield {"type": "error", "message": f"Incremental sync failed: {str(e)}"}
+            yield {"type": "error", "message": f"Incremental sync failed: {e!s}"}
 
     def search_documents(
         self,
@@ -404,10 +404,10 @@ class SyncCoordinator:
 
         except Exception as e:
             return {
-                "repository": {"status": "error", "error": str(e)},
-                "vector_store": {"status": "error", "error": str(e)},
+                "repository": {"status": "error", "error": f"{e!s}"},
+                "vector_store": {"status": "error", "error": f"{e!s}"},
                 "sync_status": "error",
-                "error": str(e),
+                "error": f"{e!s}",
             }
 
     async def cleanup_orphaned_embeddings(self) -> Dict[str, int]:
@@ -445,4 +445,4 @@ class SyncCoordinator:
             }
 
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": f"{e!s}"}
