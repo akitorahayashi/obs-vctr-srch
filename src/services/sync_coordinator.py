@@ -1,10 +1,10 @@
 """Coordinates synchronization between Git repository and vector store."""
 
-from pathlib import Path
-from typing import Dict, List, Optional
+import time
+from typing import AsyncGenerator, Dict, List, Optional
 
-from ..models import ObsidianProcessor, VectorStore
-from ..protocols.git_manager_protocol import GitManagerProtocol
+from src.models import GitManager, ObsidianProcessor, VectorStore
+from src.schemas import FileStatus
 
 
 class SyncCoordinator:
@@ -12,23 +12,13 @@ class SyncCoordinator:
 
     def __init__(
         self,
-        git_manager: GitManagerProtocol,
-        local_path: str,
-        vector_store_path: str = "./chroma_db",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        processing_path: str = None,
+        git_manager: GitManager,
+        vector_store: VectorStore,
+        processor: ObsidianProcessor,
     ):
         self.git_manager = git_manager
-        self.processor = ObsidianProcessor()
-        self.vector_store = VectorStore(
-            persist_directory=vector_store_path, model_name=embedding_model
-        )
-
-        self.local_path = Path(local_path)
-        # Use processing_path if provided, otherwise use local_path
-        self.processing_path = (
-            Path(processing_path) if processing_path else self.local_path
-        )
+        self.vector_store = vector_store
+        self.processor = processor
 
     def initial_setup(self) -> Dict[str, any]:
         """Perform initial repository setup and full sync."""
@@ -95,29 +85,150 @@ class SyncCoordinator:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def _get_markdown_files_from_processing_path(self) -> List[str]:
-        """Get all markdown files from the processing path."""
-        if not self.processing_path.exists():
-            return []
-
-        md_files = []
-        for file_path in self.processing_path.rglob("*.md"):
-            relative_path = file_path.relative_to(self.processing_path)
-            md_files.append(str(relative_path))
-
-        return md_files
-
-    def _get_file_content_from_processing_path(self, file_path: str) -> str:
-        """Get file content from the processing path."""
-        full_path = self.processing_path / file_path
-        if not full_path.exists():
-            return ""
-
+    async def rebuild_index_stream(self) -> AsyncGenerator[Dict[str, any], None]:
+        """Rebuild the entire vector index with streaming progress updates."""
         try:
-            return full_path.read_text(encoding="utf-8")
+            yield {
+                "type": "status",
+                "message": "Starting build index process...",
+                "progress": 0,
+            }
+
+            if getattr(self.git_manager, "repo", None) is None:
+                yield {
+                    "type": "status",
+                    "message": "Setting up repository...",
+                    "progress": 5,
+                }
+                if not self.git_manager.setup_repository():
+                    yield {"type": "error", "message": "Failed to setup repository"}
+                    return
+            else:
+                yield {
+                    "type": "status",
+                    "message": "Updating repository...",
+                    "progress": 5,
+                }
+                if not self.git_manager.pull_changes():
+                    yield {"type": "error", "message": "Failed to update repository"}
+                    return
+
+            yield {
+                "type": "status",
+                "message": "Clearing existing index...",
+                "progress": 10,
+            }
+            clear_result = self.vector_store.clear_collection()
+            if not clear_result["success"]:
+                yield {
+                    "type": "error",
+                    "message": f"Failed to clear existing index: {clear_result['message']}",
+                }
+                return
+
+            yield {
+                "type": "status",
+                "message": "Scanning markdown files...",
+                "progress": 15,
+            }
+            md_files = self.git_manager.get_all_markdown_files()
+
+            if not md_files:
+                yield {
+                    "type": "complete",
+                    "message": "No markdown files found",
+                    "stats": {"processed": 0, "failed": 0},
+                }
+                return
+
+            total_files = len(md_files)
+            yield {
+                "type": "status",
+                "message": f"Found {total_files} files to process",
+                "progress": 20,
+                "total_files": total_files,
+            }
+
+            stats = {"processed": 0, "failed": 0, "total_chunks": 0}
+            start_time = time.time()
+
+            for i, file_path in enumerate(md_files):
+                progress = 20 + (i / total_files) * 70
+                if i > 0:
+                    elapsed = time.time() - start_time
+                    avg_time_per_file = elapsed / i
+                    remaining_files = total_files - i
+                    eta_seconds = remaining_files * avg_time_per_file
+                    eta_str = f"{int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                else:
+                    eta_str = "calculating..."
+
+                yield {
+                    "type": "progress",
+                    "message": f"Processing: {file_path}",
+                    "progress": progress,
+                    "current_file": i + 1,
+                    "total_files": total_files,
+                    "eta": eta_str,
+                }
+
+                try:
+                    content = self.git_manager.get_file_content(file_path)
+                    if not content:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"No content found for: {file_path}",
+                        }
+                        continue
+
+                    document = self.processor.process_file(file_path, content)
+                    if not document:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to process: {file_path}",
+                        }
+                        continue
+
+                    chunks = self.processor.split_content_for_embedding(document)
+                    if self.vector_store.add_document(document, chunks):
+                        stats["processed"] += 1
+                        stats["total_chunks"] += len(chunks)
+                        yield {
+                            "type": "file_complete",
+                            "message": f"✅ Processed: {file_path} ({len(chunks)} chunks)",
+                            "file_path": file_path,
+                            "chunks": len(chunks),
+                        }
+                    else:
+                        stats["failed"] += 1
+                        yield {
+                            "type": "warning",
+                            "message": f"Failed to add to vector store: {file_path}",
+                        }
+
+                except Exception as e:
+                    stats["failed"] += 1
+                    yield {
+                        "type": "error",
+                        "message": f"Error processing {file_path}: {str(e)}",
+                    }
+
+            total_time = time.time() - start_time
+            yield {"type": "status", "message": "Finalizing...", "progress": 95}
+
+            result = {
+                "type": "complete",
+                "message": f'Build index complete! Processed {stats["processed"]} files, {stats["failed"]} failed',
+                "stats": stats,
+                "total_time_seconds": round(total_time, 2),
+                "progress": 100,
+            }
+            yield result
+
         except Exception as e:
-            print(f"Failed to read {file_path}: {e}")
-            return ""
+            yield {"type": "error", "message": f"Build index failed: {str(e)}"}
 
     def incremental_sync(self) -> Dict[str, any]:
         """Perform incremental synchronization based on git changes."""
@@ -151,7 +262,10 @@ class SyncCoordinator:
             }
 
             for change in changes:
-                if change.change_type in ["A", "M"]:  # Added or Modified
+                if change.status in [
+                    FileStatus.ADDED,
+                    FileStatus.MODIFIED,
+                ]:  # Added or Modified
                     try:
                         # Get file content
                         content = self.git_manager.get_file_content(change.file_path)
@@ -188,7 +302,7 @@ class SyncCoordinator:
                 "changes": [
                     {
                         "file_path": change.file_path,
-                        "change_type": change.change_type,
+                        "status": change.status.value,
                         "old_file_path": change.old_file_path,
                     }
                     for change in changes
@@ -197,30 +311,6 @@ class SyncCoordinator:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
-
-    def _get_markdown_files_from_processing_path(self) -> List[str]:
-        """Get all markdown files from the processing path."""
-        if not self.processing_path.exists():
-            return []
-
-        md_files = []
-        for file_path in self.processing_path.rglob("*.md"):
-            relative_path = file_path.relative_to(self.processing_path)
-            md_files.append(str(relative_path))
-
-        return md_files
-
-    def _get_file_content_from_processing_path(self, file_path: str) -> str:
-        """Get file content from the processing path."""
-        full_path = self.processing_path / file_path
-        if not full_path.exists():
-            return ""
-
-        try:
-            return full_path.read_text(encoding="utf-8")
-        except Exception as e:
-            print(f"Failed to read {file_path}: {e}")
-            return ""
 
     def search_documents(
         self,

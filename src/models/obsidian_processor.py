@@ -7,6 +7,8 @@ import frontmatter
 import tiktoken
 from pydantic import BaseModel
 
+from src.config.settings import Settings
+
 
 class ObsidianDocument(BaseModel):
     """Represents a processed Obsidian document."""
@@ -26,7 +28,8 @@ class ObsidianDocument(BaseModel):
 class ObsidianProcessor:
     """Processes Obsidian vault files and extracts structured information."""
 
-    def __init__(self):
+    def __init__(self, settings: Settings):
+        # (settings is unused for now, but added for DI consistency)
         # Initialize tokenizer for token counting
         try:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")

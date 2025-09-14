@@ -4,41 +4,37 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
-from ..schemas import FileChange, SearchResult
+from src.config.settings import Settings
+from src.schemas import FileChange, FileStatus, SearchResult
+
 from .obsidian_processor import ObsidianDocument
 
 
 class VectorStore:
     """Manages vector embeddings with incremental update capabilities."""
 
-    def __init__(
-        self,
-        persist_directory: str = "./chroma_db",
-        collection_name: str = "obsidian_vault",
-        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-    ):
-        self.persist_directory = Path(persist_directory)
-        self.collection_name = collection_name
-        self.model_name = model_name
+    def __init__(self, settings: Settings):
+        self.collection_name = "obsidian_vault"  # Hardcoded, not from settings
+        self.model_name = settings.EMBEDDING_MODEL_NAME
+        self.persist_directory = Path(settings.VECTOR_DB_PATH)
 
         # Initialize ChromaDB
         self.client = chromadb.PersistentClient(
             path=str(self.persist_directory),
-            settings=Settings(anonymized_telemetry=False),
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
         )
 
         # Initialize embedding model
-        self.embedding_model = SentenceTransformer(model_name)
+        self.embedding_model = SentenceTransformer(self.model_name)
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
-            name=collection_name,
+            name=self.collection_name,
             metadata={
                 "description": "Obsidian vault embeddings",
-                "model_name": model_name,
+                "model_name": self.model_name,
             },
         )
 
@@ -265,12 +261,11 @@ class VectorStore:
         stats = {"added": 0, "updated": 0, "deleted": 0, "renamed": 0}
 
         for change in changes:
-            if change.change_type == "D":  # Deleted
+            if change.status == FileStatus.DELETED:
                 if self.remove_document(change.file_path):
                     stats["deleted"] += 1
 
-            elif change.change_type == "R":  # Renamed
-                # Remove old file
+            elif change.status == FileStatus.RENAMED:
                 if change.old_file_path and self.remove_document(change.old_file_path):
                     stats["renamed"] += 1
                 # New file will be handled by the sync process

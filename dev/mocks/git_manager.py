@@ -1,13 +1,10 @@
 """Mock implementation of GitManagerProtocol for development and testing."""
 
-# Import the existing FileChange model
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.models import FileChange
+from src.schemas import FileChange
 
 
 class MockGitManager:

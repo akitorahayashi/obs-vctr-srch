@@ -4,23 +4,18 @@ from typing import Dict, List, Optional
 
 from git import Repo
 
-from ..schemas import FileChange
+from src.config.settings import Settings
+from src.schemas import FileChange, FileStatus
 
 
 class GitManager:
     """Manages git repository operations for Obsidian vault."""
 
-    def __init__(
-        self,
-        repo_url: str,
-        local_path: str,
-        branch: str = "main",
-        github_token: str = "",
-    ):
-        self.repo_url = repo_url
-        self.local_path = Path(local_path)
-        self.branch = branch
-        self.github_token = github_token
+    def __init__(self, settings: Settings):
+        self.repo_url = settings.OBSIDIAN_REPO_URL
+        self.local_path = Path(settings.OBSIDIAN_LOCAL_PATH)
+        self.branch = settings.OBSIDIAN_BRANCH
+        self.github_token = settings.OBS_VAULT_TOKEN
         self.repo: Optional[Repo] = None
 
     def setup_repository(self) -> bool:
@@ -122,16 +117,26 @@ class GitManager:
 
             changes = []
             for item in diff_items:
-                change_type = item.change_type
+                change_type_map = {
+                    "A": FileStatus.ADDED,
+                    "M": FileStatus.MODIFIED,
+                    "D": FileStatus.DELETED,
+                    "R": FileStatus.RENAMED,
+                    "T": FileStatus.MODIFIED,  # Treat type changes as modifications
+                }
+                status = change_type_map.get(item.change_type)
+                if not status:
+                    continue  # Skip unsupported change types
+
                 file_path = item.a_path or item.b_path
-                old_file_path = item.a_path if item.renamed_file else None
+                old_file_path = item.a_path if item.renamed else None
 
                 # Only process .md files (Obsidian notes)
                 if file_path and file_path.endswith(".md"):
                     changes.append(
                         FileChange(
                             file_path=file_path,
-                            change_type=change_type,
+                            status=status,
                             old_file_path=old_file_path,
                         )
                     )

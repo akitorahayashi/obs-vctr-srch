@@ -1,5 +1,4 @@
-"""Schemas for the application."""
+from .git import FileChange, FileStatus
+from .search import SearchRequest, SearchResult
 
-from .app_schemas import FileChange, SearchRequest, SearchResult
-
-__all__ = ["FileChange", "SearchRequest", "SearchResult"]
+__all__ = ["FileChange", "FileStatus", "SearchRequest", "SearchResult"]
