@@ -15,5 +15,5 @@ services:
     volumes:
       - "./src:/app/src"
     environment:
-      - OBS_API_URL=http://api:8000
+      - EXTERNAL_API_URL=http://${HOST_BIND_IP}:${TEST_PORT}
 

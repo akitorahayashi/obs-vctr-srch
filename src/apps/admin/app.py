@@ -27,15 +27,17 @@ static_dir = current_dir / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# API base URL (configurable via environment)
-API_BASE_URL = os.getenv("OBS_API_URL", "http://127.0.0.1:8005")
+# Internal API URL (Docker internal communication)
+INTERNAL_API_URL = os.getenv("INTERNAL_API_URL", "http://api:8000")
+# External API URL (Browser to API communication)
+EXTERNAL_API_URL = os.getenv("EXTERNAL_API_URL", "http://127.0.0.1:8005")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Main admin dashboard."""
     return templates.TemplateResponse(
-        "dashboard.html", {"request": request, "api_base_url": API_BASE_URL}
+        "dashboard.html", {"request": request, "api_base_url": INTERNAL_API_URL}
     )
 
 
@@ -43,7 +45,8 @@ async def dashboard(request: Request):
 async def build_index_monitor(request: Request):
     """Build index monitoring page."""
     return templates.TemplateResponse(
-        "build_index_monitor.html", {"request": request, "api_base_url": API_BASE_URL}
+        "build_index_monitor.html",
+        {"request": request, "api_base_url": INTERNAL_API_URL, "external_api_url": EXTERNAL_API_URL}
     )
 
 
@@ -52,11 +55,11 @@ async def get_api_status():
     """Check if the main API is accessible."""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{API_BASE_URL}/health", timeout=5.0)
+            response = await client.get(f"{INTERNAL_API_URL}/health", timeout=5.0)
             if response.status_code == 200:
                 # Also check obs health
                 obs_response = await client.get(
-                    f"{API_BASE_URL}/api/obs-vctr-srch/health", timeout=5.0
+                    f"{INTERNAL_API_URL}/api/obs-vctr-srch/health", timeout=5.0
                 )
                 return {
                     "status": "healthy",
@@ -64,12 +67,12 @@ async def get_api_status():
                     "obs_health": (
                         obs_response.json() if obs_response.status_code == 200 else None
                     ),
-                    "api_url": API_BASE_URL,
+                    "api_url": INTERNAL_API_URL,
                 }
             else:
-                return {"status": "unhealthy", "api_url": API_BASE_URL}
+                return {"status": "unhealthy", "api_url": INTERNAL_API_URL}
     except Exception as e:
-        return {"status": "error", "error": str(e), "api_url": API_BASE_URL}
+        return {"status": "error", "error": str(e), "api_url": INTERNAL_API_URL}
 
 
 @app.get("/api/repository-status")
@@ -78,7 +81,7 @@ async def get_repository_status():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{API_BASE_URL}/api/obs-vctr-srch/status", timeout=10.0
+                f"{INTERNAL_API_URL}/api/obs-vctr-srch/status", timeout=10.0
             )
             if response.status_code == 200:
                 return response.json()
@@ -95,7 +98,7 @@ if __name__ == "__main__":
     port = int(os.getenv("ADMIN_PORT", "8010"))
 
     print(f"Starting Obsidian Vector Search Admin Console on {host}:{port}")
-    print(f"Main API URL: {API_BASE_URL}")
+    print(f"Main API URL: {INTERNAL_API_URL}")
 
     # Only enable reload in development environment
     reload = os.getenv("ENVIRONMENT", "production") == "development"

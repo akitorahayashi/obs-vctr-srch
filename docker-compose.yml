@@ -26,7 +26,8 @@ services:
     env_file:
       - .env
     environment:
-      - OBS_API_URL=http://api:8000
+      - INTERNAL_API_URL=http://api:8000
+      - EXTERNAL_API_URL=http://${HOST_BIND_IP}:${HOST_PORT}
     command: ["python", "-m", "src.apps.admin.app"]
     depends_on:
       - api
