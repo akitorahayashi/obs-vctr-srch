@@ -11,7 +11,6 @@ echo "Application startup preparations completed."
 
 # --- Start Uvicorn server (or run another command) ---
 # If arguments are passed to the script, execute them instead of the default server.
-# This allows running commands like `make shell`.
 if [ "$#" -gt 0 ]; then
     # Execute command as current user
     exec "$@"

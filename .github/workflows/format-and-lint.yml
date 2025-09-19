@@ -18,10 +18,11 @@ jobs:
       - name: Install uv
         run: pipx install uv
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Install dependencies
         run: uv sync --only-group dev --frozen
 
       - name: Run Linters
-        run: |
-          source .venv/bin/activate
-          make lint
+        run: just lint

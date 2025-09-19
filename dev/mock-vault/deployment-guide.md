@@ -13,7 +13,7 @@ Key configuration options in `.env`:
 
 ## Docker Compose
 
-Run with `make up` for development or `make up-prod` for production deployment.
+Run with `just up` for development or `just up-prod` for production deployment.
 
 The system includes:
 - API service on port 8000
@@ -22,7 +22,7 @@ The system includes:
 
 ## Testing
 
-Use `make e2e-test` to run the full test suite including:
+Use `just e2e-test` to run the full test suite including:
 - API health verification
 - Search functionality testing
 - Repository synchronization tests
