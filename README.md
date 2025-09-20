@@ -20,7 +20,7 @@ A FastAPI application that enables vector-based search of your private Obsidian 
 ### 2. Setup Environment
 
 ```bash
-make setup
+just setup
 ```
 
 This installs dependencies with uv and creates `.env` file from `.env.example`.
@@ -64,7 +64,7 @@ Note: `OBSIDIAN_LOCAL_PATH`, `OBSIDIAN_BRANCH`, and `VECTOR_DB_PATH` are now har
 ### 3. Start Development Server
 
 ```bash
-make up
+just up
 ```
 
 The API will be available at `http://127.0.0.1:8000` (configurable in `.env`).
@@ -83,19 +83,19 @@ Interactive API documentation is available when the server is running:
 
 | Command | Description |
 |---------|-------------|
-| `make setup` | Initialize environment files |
-| `make up` | Start development containers |
-| `make down` | Stop development containers |
-| `make test` | Run all tests |
-| `make unit-test` | Run unit tests only |
-| `make intg-test` | Run integration tests only |
-| `make e2e-test` | Run end-to-end tests only |
-| `make format` | Format code with Black and fix with Ruff |
-| `make lint` | Check code format and lint |
-| `make shell` | Open shell in API container |
-| `make logs` | View API container logs |
-| `make migrate` | Run database migrations |
-| `make migration m="msg"` | Generate a new database migration |
+| `just setup` | Initialize environment files |
+| `just up` | Start development containers |
+| `just down` | Stop development containers |
+| `just test` | Run all tests |
+| `just unit-test` | Run unit tests only |
+| `just intg-test` | Run integration tests only |
+| `just e2e-test` | Run end-to-end tests only |
+| `just format` | Format code with Black and fix with Ruff |
+| `just lint` | Check code format and lint |
+| `just shell` | Open shell in API container |
+| `just logs` | View API container logs |
+| `just migrate` | Run database migrations |
+| `just migration "msg"` | Generate a new database migration |
 
 ## Project Structure
 
@@ -146,7 +146,7 @@ All tests run independently without external dependencies.
 ### Production
 
 ```bash
-make up-prod
+just up-prod
 ```
 
 Uses production environment configuration from `.env`.
@@ -207,7 +207,7 @@ docker build --target development -t myapp:dev .
 docker build --target production -t myapp:prod .
 
 # Test build (validates production build without keeping image)
-make build-test
+just build-test
 ```
 
 ## Adding Database Models
@@ -225,7 +225,7 @@ Database migrations run automatically in Docker containers.
 - **uv**: Ultra-fast dependency management
 - **Pytest**: Testing framework with testcontainers
 
-Run `make format` and `make lint` before committing.
+Run `just format` and `just lint` before committing.
 
 ## Volume Management
 

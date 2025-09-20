@@ -36,7 +36,8 @@ jobs:
       - name: Create .env file from example
         run: cp .env.example .env
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Run tests
-        run: |
-          source .venv/bin/activate
-          make ${{ matrix.test_target }}
+        run: just ${{ matrix.test_target }}
