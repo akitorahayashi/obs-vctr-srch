@@ -37,4 +37,4 @@ jobs:
         run: cp .env.example .env
 
       - name: Run tests
-        run: make ${{ matrix.test_target }}
+        run: just ${{ matrix.test_target }}
