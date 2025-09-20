@@ -26,19 +26,19 @@ default: help
 
 # Initialize project: install dependencies, create .env file
 setup:
-    @echo "Installing python dependencies with uv..."
+    @echo "🐍 Installing python dependencies with uv..."
     @uv sync
-    @echo "Creating environment file..."
-    @if [ ! -f .env ] && [ -f .env.example ]; then \
-        echo "Creating .env from .env.example..."; \
-        cp .env.example .env; \
-        echo "✅ Environment file created (.env)"; \
+    @echo "📦 Initializing and updating git submodules..."
+    @git submodule update --init --recursive
+    @echo "📄 Creating secrets.toml file..."
+    @if [ ! -f .streamlit/secrets.toml ]; then \
+        echo "Creating .streamlit/secrets.toml from .streamlit/secrets.example.toml..." ; \
+        cp .streamlit/secrets.example.toml .streamlit/secrets.toml; \
+        echo "✅ .streamlit/secrets.toml file created."; \
     else \
-        echo ".env already exists. Skipping creation."; \
+        echo "✅ .streamlit/secrets.toml already exists. Skipping creation."; \
     fi
-    @echo "💡 You can customize .env for your specific needs:"
-    @echo "   📝 Change OLLAMA_HOST to switch between container/host Ollama"
-    @echo "   📝 Adjust other settings as needed"
+    @echo "💡 You can customize the .streamlit/secrets.toml file for your specific needs."
 
 # ==============================================================================
 # Development Environment Commands
